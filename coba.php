@@ -6,6 +6,6 @@
     <title>Document</title>
 </head>
 <body>
-    <h1>MOMOK</h1>
+    <h1>Maurin istrinya wonu</h1>
 </body>
 </html>
