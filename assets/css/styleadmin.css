@@ -1,153 +1,41 @@
 body {
   font-family: Arial, sans-serif;
   display: flex;
+  margin: 0;
 }
 
-.page-title {
-  margin-top: 40px; /* jarak dari header ke judul */
-  margin-bottom: 50px; /* jarak dari judul ke "Ringkasan Statistik" */
-  padding-bottom: 20px; /* jarak ke garis bawah */
-  border-bottom: 2px solid #1f7a8c33;
-}
-
-.page-title h1 {
-  font-size: 30px;
-  font-weight: 700;
-  color: #1f7a8c;
-  margin-bottom: 15px; /* jarak ke paragraf */
-}
-
-.page-title p {
-  font-size: 16px;
-  line-height: 1.7; /* biar lebih renggang */
-  color: #444;
-}
-
+/* Sidebar */
 .sidebar {
   width: 250px;
   background: #d7eaea;
-  padding: 15px;
+  padding: 15px 0;
   height: 100vh;
+  position: fixed;
+  left: 0;
+  top: 0;
+  transition: width 0.3s;
+  overflow-x: hidden;
+}
+.sidebar.collapsed {
+  width: 60px;
 }
 
 .sidebar h2 {
   border-bottom: 1px solid #333;
-}
-
-.sidebar ul {
-  list-style: none;
-  padding: 0;
-}
-
-.sidebar ul li {
-  margin: 10px 0;
-}
-
-.content {
-  flex: 1;
-  padding: 20px;
-}
-
-.stats {
-  display: flex;
-  gap: 15px;
-  margin-bottom: 20px;
-}
-
-.box {
-  padding: 20px;
-  border-radius: 8px;
-  font-weight: bold;
-  background: #ccc;
-}
-
-.success {
-  background: #a8f0a5;
-}
-.warning {
-  background: #f8e38f;
-}
-.danger {
-  background: #f5a1a1;
-}
-
-.riwayat .item {
-  background: #eef;
-  margin: 10px 0;
-  padding: 10px;
-  border-radius: 6px;
-}
-
-.pending {
-  color: orange;
-  font-weight: bold;
-}
-.success {
-  color: green;
-  font-weight: bold;
-}
-.danger {
-  color: red;
-  font-weight: bold;
-}
-
-/* Saat sidebar collapse, sembunyikan teks dan submenu */
-.sidebar.collapsed h2,
-.sidebar.collapsed .menu a span,
-.sidebar.collapsed .submenu {
-  display: none !important;
-}
-
-/* Ikon tetap center saat collapsed */
-.sidebar.collapsed .menu a {
-  justify-content: center;
-}
-
-/* Arrow juga disembunyikan saat collapse */
-.sidebar.collapsed .arrow {
-  display: none;
-}
-
-/* Arrow styling */
-.arrow {
-  margin-left: auto;
-  transition: transform 0.3s;
-  font-size: 12px;
-}
-
-/* Saat dropdown terbuka, panah mengarah ke bawah */
-.dropdown.open .arrow {
-  transform: rotate(90deg);
-}
-/* Submenu style */
-.submenu {
-  list-style: none;
-  padding-left: 40px;
-  display: none;
-}
-.submenu li a {
-  display: block;
-  padding: 6px 0;
+  padding: 0 16px 10px;
   font-size: 14px;
-  color: #333;
-  text-decoration: none;
-}
-.submenu li a:hover {
-  color: #1f7a8c;
+  color: #555;
 }
 
-/* Kasih warna ke ikon */
-/* Semua ikon sidebar jadi berwarna */
+/* Menu */
 .menu {
   list-style: none;
   padding: 0;
   margin: 0;
 }
-
 .menu li {
   margin-bottom: 5px;
 }
-
 .menu a {
   display: flex;
   align-items: center;
@@ -157,50 +45,31 @@ body {
   border-radius: 8px;
   transition: background 0.3s;
 }
-
 .menu a.active {
   background: #1f7a8c;
   color: #fff;
   font-weight: bold;
 }
-
-.menu a span {
-  flex: 1; /* teks ambil ruang tengah */
-  margin-left: 10px;
-}
-
-/* panah di kanan */
-.arrow {
-  margin-left: auto;
-  font-size: 12px;
-  transition: transform 0.3s ease;
-}
-
 .menu a:hover {
   background: #e1f4f9;
 }
-
-/* ikon sidebar */
-.menu i {
-  font-style: normal; /* biar emoji nggak italic */
-  font-size: 20px; /* ukuran pas */
+.menu a i {
+  font-style: normal;
+  font-size: 20px;
   margin-right: 12px;
-  display: flex;
-  align-items: center;
-}
-/* ikon tetap di kiri */
-.menu i:first-child {
-  color: #1f7a8c;
-  width: 18px;
+  width: 20px;
   text-align: center;
+  color: #1f7a8c;
 }
-
-/* kalau aktif */
 .menu a.active i {
   color: #fff;
 }
+.menu a span {
+  margin-left: 10px;
+  flex: 1;
+}
 
-/* panah di kanan */
+/* Arrow pakai border */
 .arrow {
   margin-left: auto;
   width: 0;
@@ -210,15 +79,103 @@ body {
   border-bottom: 4px solid transparent;
   transition: transform 0.3s;
 }
+.dropdown.open .arrow {
+  transform: rotate(90deg);
+}
 
-/* submenu hidden default */
+/* Submenu */
 .submenu {
   display: none;
   padding-left: 30px;
+  background: #f9f9f9;
 }
-
+.dropdown.open .submenu {
+  display: block;
+}
 .submenu li a {
+  display: block;
   padding: 8px 16px;
   font-size: 14px;
   color: #444;
+}
+.submenu li a:hover {
+  color: #1f7a8c;
+}
+
+/* Main */
+.main {
+  margin-left: 60px; /* default = sidebar tertutup */
+  flex: 1;
+  padding: 20px;
+  transition: margin-left 0.3s;
+}
+.sidebar:not(.collapsed) ~ .main {
+  margin-left: 250px;
+}
+
+/* Statistik */
+.stats {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+.box {
+  flex: 1;
+  padding: 20px;
+  border-radius: 8px;
+  font-weight: bold;
+  background: #ccc;
+}
+.box.success {
+  background: #a8f0a5;
+}
+.box.warning {
+  background: #f8e38f;
+}
+.box.danger {
+  background: #f5a1a1;
+}
+
+/* Riwayat */
+.riwayat .item {
+  background: #eef;
+  margin: 10px 0;
+  padding: 10px;
+  border-radius: 6px;
+}
+.status {
+  font-weight: bold;
+}
+.status.pending {
+  color: orange;
+}
+.status.success {
+  color: green;
+}
+.status.danger {
+  color: red;
+}
+
+/* Biar teks di semua menu konsisten */
+.menu a span {
+  margin-left: 10px;
+  flex: 1;
+  text-align: left; /* teks selalu rata kiri */
+}
+
+/* Arrow biar tempatnya tetap ada */
+.menu a .arrow {
+  width: 0;
+  height: 0;
+  border-left: 6px solid #333;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  margin-left: auto;
+  transition: transform 0.3s;
+}
+
+/* Kalau bukan dropdown, tetap kasih dummy arrow biar rata */
+.menu a.no-arrow .arrow {
+  border: none;
+  width: 12px; /* reserve space */
 }
