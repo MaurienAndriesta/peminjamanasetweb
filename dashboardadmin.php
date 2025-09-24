@@ -18,7 +18,6 @@ $riwayat = [
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard Admin Pengelola</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     *{margin:0;padding:0;box-sizing:border-box;}
     body{font-family:'Inter',sans-serif;background:#e3f2f9;display:flex;min-height:100vh;color:#333;}
@@ -27,28 +26,45 @@ $riwayat = [
     .sidebar{
         width:250px;background:#fff;border-right:1px solid #ccc;
         padding:20px 0;position:fixed;left:0;top:0;bottom:0;
-        transition:width .3s;overflow:hidden;
+        transition:width .3s;overflow-x:hidden;
     }
     .sidebar.collapsed{width:60px;}
-    .sidebar h2{padding:0 20px;margin-bottom:15px;font-size:14px;text-transform:uppercase;color:#555;transition:opacity .3s;}
-    .sidebar.collapsed h2{opacity:0;}
     .menu{list-style:none;}
     .menu li{margin-bottom:5px;}
     .menu a{
-        display:flex;align-items:center;
+        display:flex;align-items:center;justify-content:space-between;
         padding:10px 20px;
         text-decoration:none;color:#333;
         border-radius:10px;transition:all .2s;
         white-space:nowrap;
     }
     .menu a:hover,.menu a.active{background:#1f7a8c;color:#fff;}
-    .menu a i{margin-right:10px;transition:margin .3s;}
+    .menu a i{margin-right:10px;}
     .sidebar.collapsed .menu a span{display:none;}
     .sidebar.collapsed .menu a i{margin:0 auto;}
 
+    /* Submenu */
+    .submenu {
+        display: none;
+        list-style:none;
+        padding-left:30px;
+        background:#f9f9f9;
+    }
+    .submenu li a {
+        display:block;
+        padding:8px 15px;
+        font-size:14px;
+        color:#333;
+        border-radius:6px;
+    }
+    .submenu li a:hover {background:#e0f4ff;}
+
+    .dropdown.open .submenu {display:block;}
+    .arrow {margin-left:auto;transition:transform .3s;}
+
     /* Main */
-    .main{margin-left:250px;flex:1;padding:20px;transition:margin-left .3s;}
-    .sidebar.collapsed ~ .main{margin-left:60px;}
+    .main{margin-left:60px;flex:1;padding:20px;transition:margin-left .3s;}
+    .sidebar:not(.collapsed) ~ .main{margin-left:250px;}
 
     .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
     .hamburger{
@@ -96,22 +112,23 @@ $riwayat = [
 </head>
 <body>
 
-<div class="sidebar" id="sidebar">
+<div class="sidebar collapsed" id="sidebar">
    <ul class="menu">
     <li>
-        <a href="#" class="active">
-            <i>🏠</i>
-            <span>Dashboard</span>
-        </a>
-    </li>
+  <a href="#" class="active no-arrow">
+    <i>🏠</i>
+    <span>Dashboard</span>
+    <span class="arrow"></span>
+  </a>
+</li>
 
     <li class="dropdown">
-        <a href="#" onclick="toggleDropdown(event,'sewaMenu')">
+        <a href="#" onclick="toggleDropdown(event)">
             <i>📝</i>
             <span>Data Sewa Ruangan</span>
             <span class="arrow">▼</span>
         </a>
-        <ul class="submenu" id="sewaMenu">
+        <ul class="submenu">
             <li><a href="#">Ruangan Multiguna</a></li>
             <li><a href="#">Fasilitas</a></li>
             <li><a href="#">Usaha</a></li>
@@ -120,33 +137,34 @@ $riwayat = [
     </li>
 
     <li>
-        <a href="#">
-            <i>📄</i>
-            <span>Permintaan</span>
-        </a>
-    </li>
+  <a href="#" class="no-arrow">
+    <i>📄</i>
+    <span>Permintaan</span>
+    <span class="arrow"></span>
+  </a>
+</li>
 
-    <li>
-        <a href="#">
-            <i>📅</i>
-            <span>Jadwal</span>
-        </a>
-    </li>
+  <li>
+  <a href="#" class="no-arrow">
+    <i>📅</i>
+    <span>Jadwal</span>
+    <span class="arrow"></span>
+  </a>
+</li>
 
     <li class="dropdown">
-        <a href="#" onclick="toggleDropdown(event,'laporanMenu')">
+        <a href="#" onclick="toggleDropdown(event)">
             <i>📊</i>
             <span>Laporan</span>
             <span class="arrow">▼</span>
         </a>
-        <ul class="submenu" id="laporanMenu">
+        <ul class="submenu">
             <li><a href="#">Penggunaan Ruangan</a></li>
             <li><a href="#">Keuangan</a></li>
         </ul>
     </li>
 </ul>
 </div>
-
 
 <!-- Main -->
 <div class="main">
@@ -163,7 +181,6 @@ $riwayat = [
         <div class="stat-box yellow">MENUNGGU PERSETUJUAN <span><?= $menunggu_persetujuan ?></span></div>
         <div class="stat-box red">PENDAPATAN BULAN INI <span>Rp <?= number_format($pendapatan,0,',','.') ?></span></div>
     </div>
-
 
     <div class="riwayat">
         <h2>Riwayat Permintaan</h2>
@@ -197,22 +214,26 @@ function toggleSidebar(){
     if(sidebar.classList.contains("collapsed")){
         document.querySelectorAll(".submenu").forEach(s => s.style.display = "none");
         document.querySelectorAll(".dropdown").forEach(d => d.classList.remove("open"));
+        document.querySelectorAll(".arrow").forEach(a => a.style.transform = "rotate(0deg)");
     }
 }
 
-function toggleDropdown(event, id) {
+function toggleDropdown(event) {
     event.preventDefault();
-    const submenu = document.getElementById(id);
-    const arrow = event.currentTarget.querySelector(".arrow");
+    const parent = event.currentTarget.parentElement;
+    const submenu = parent.querySelector(".submenu");
+    const arrow = parent.querySelector(".arrow");
 
-    submenu.style.display =
-        submenu.style.display === "block" ? "none" : "block";
+    parent.classList.toggle("open");
 
-    // putar panah
-    arrow.style.transform =
-        submenu.style.display === "block" ? "rotate(180deg)" : "rotate(0deg)";
+    if (parent.classList.contains("open")) {
+        submenu.style.display = "block";
+        arrow.style.transform = "rotate(180deg)";
+    } else {
+        submenu.style.display = "none";
+        arrow.style.transform = "rotate(0deg)";
+    }
 }
-
 </script>
 </body>
 </html>
