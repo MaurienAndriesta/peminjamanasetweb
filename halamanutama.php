@@ -57,7 +57,7 @@ $menu_items = [
 
        
         .hamburger-btn {
-            position: fixed;top: 15px;left: 15px;
+            position: fixed;top: 20px;left: 20px;
             z-index: 1001;
             background: #D9D9D9;color:#fff;
             border: none;padding: 10px 14px;
