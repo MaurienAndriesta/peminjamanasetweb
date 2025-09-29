@@ -133,7 +133,7 @@ function renderMenu($items, $prefix = 'root') {
           <td class="border border-gray-200 px-4 py-3"><?= $row['no'] ?></td>
           <td class="border border-gray-200 px-4 py-3 text-center">-</td>
           <td class="border border-gray-200 px-4 py-3"><?= $row['nama_laboratorium'] ?></td>
-          <td class="border border-gray-200 px-4 py-3"><?= $row['satuan'] ?></td>
+          <td class="border border-gray-200 px-4 py-3"><?= $row['Satuan'] ?></td>
           <td class="border border-gray-200 px-4 py-3"><?= $row['lokasi'] ?></td>
           <td class="border border-gray-200 px-4 py-3"><?= $row['internal_itpln'] ?></td>
           <td class="border border-gray-200 px-4 py-3"><?= $row['eksternal_itpln'] ?></td>
