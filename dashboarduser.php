@@ -1,7 +1,7 @@
 <?php
 session_start();
 if (!isset($_SESSION['user'])) {
-    $_SESSION['user'] = "NAMA PENGGUNA"; 
+    $_SESSION['user'] = "Nama Pengguna"; 
 }
 
 $menu_items = [
@@ -9,7 +9,7 @@ $menu_items = [
         'title' => 'Daftar Ruangan & Fasilitas',
         'type' => 'dropdown',
         'submenu' => [
-            ['title' => 'Ruangan Multiguna', 'url' => 'ruanganmultiguna.php'],
+            ['title' => 'Ruangan Multiguna', 'url' => 'ruangmultiguna.php'],
             ['title' => 'Fasilitas', 'url' => 'fasilitas.php'],
             ['title' => 'Usaha', 'url' => 'usaha.php'],
             [
@@ -18,7 +18,7 @@ $menu_items = [
                 'submenu' => [
                    ['title' => 'Fakultas Teknologi dan Bisnis Energi (FTBE)', 'url' => 'labftbe.php'],
                    ['title' => 'Fakultas Telematika Energi (FTEN)', 'url' => 'labften.php'],
-                   ['title' => 'Fakultas Teknologi Infrastruktur dan Kewilayahan (FTIK)', 'url' => 'labftik.php'],
+                   ['title' => 'Fakultas Teknologi dan Infrasturktur Kewilayahan (FTIK)', 'url' => 'labftik.php'],
                    ['title' => 'Fakultas Ketenagalistrikan dan Energi Terbarukan (FKET)', 'url' => 'labfket.php'],
                 ]
             ]
@@ -29,22 +29,21 @@ $menu_items = [
     ['title' => 'Riwayat Peminjaman', 'url'  => 'riwayat.php'],
 ];
 
-// fungsi render menu rekursif
 function renderMenu($items, $prefix = 'root') {
-    echo "<ul class='menu-list'>";
+    echo "<ul class='space-y-1'>";
     foreach ($items as $index => $item) {
         $uniqueId = $prefix . '-' . $index;
-        echo "<li class='menu-item'>";
+        echo "<li>";
         if (isset($item['type']) && $item['type'] === 'dropdown') {
-            echo "<a href='#' class='menu-link' onclick='event.preventDefault(); toggleDropdown(\"{$uniqueId}\");'>";
+            echo "<button onclick='toggleDropdown(\"{$uniqueId}\")' class='w-full flex justify-between items-center px-4 py-2 text-left text-sm font-medium text-white hover:bg-gray-700 rounded-md'>";
             echo "<span>{$item['title']}</span>";
-            echo "<span class='menu-icon' id='icon-{$uniqueId}'>▼</span>";
-            echo "</a>";
-            echo "<ul class='submenu' id='submenu-{$uniqueId}'>";
+            echo "<span id='icon-{$uniqueId}' class='transition-transform'>▼</span>";
+            echo "</button>";
+            echo "<div id='submenu-{$uniqueId}' class='hidden pl-4 space-y-1'>";
             renderMenu($item['submenu'], $uniqueId);
-            echo "</ul>";
+            echo "</div>";
         } else {
-            echo "<a href='{$item['url']}' class='menu-link'>{$item['title']}</a>";
+            echo "<a href='{$item['url']}' class='block px-4 py-2 text-sm text-white hover:bg-gray-700 rounded-md'>{$item['title']}</a>";
         }
         echo "</li>";
     }
@@ -52,222 +51,179 @@ function renderMenu($items, $prefix = 'root') {
 }
 
 $user_name = $_SESSION['user'];
-
-// contoh data kalender
-$months = [
-    1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April',
-    5 => 'May', 6 => 'June', 7 => 'July', 8 => 'August',
-    9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December'
-];
 $total_peminjaman_aktif = 12;
 $total_menunggu_persetujuan = 3;
 $booked_dates = [22, 29];
 ?>
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistem Peminjaman Aset Kampus - Institut Teknologi PLN</title>
-    <link rel="stylesheet" href="dashboarduser.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Sistem Peminjaman Aset</title>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-    <div class="container">
-        <!-- Hamburger Button -->
-        <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleSidebar()">☰</button>
-        
-        <!-- Overlay -->
-        <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
-        
-        <!-- Sidebar -->
-        <div class="sidebar" id="sidebar">
-            <div class="menu-header">
-                <div class="menu-title">Menu Utama</div>
+<body class="bg-gradient-to-br from-[#D1E5EA] to-white min-h-screen">
+
+<!-- Sidebar -->
+<div id="sidebar" class="fixed top-0 left-0 w-72 h-full bg-gray-800 text-white transform -translate-x-full transition-transform duration-300 z-50">
+  <div class="bg-gray-900 px-5 py-4 font-bold uppercase text-sm tracking-widest">Menu Utama</div>
+  <nav class="p-2">
+    <?php renderMenu($menu_items); ?>
+  </nav>
+</div>
+
+<!-- Overlay -->
+<div id="overlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-40" onclick="closeSidebar()"></div>
+
+<!-- Hamburger -->
+<button id="hamburgerBtn" onclick="toggleSidebar()" class="fixed top-4 left-2 z-50 bg-gray-800 text-white p-3 rounded-md">☰</button>
+
+<!-- Main Content -->
+<main class="ml-0 transition-all duration-300 p-6 md:p-10">
+  <br>
+  <div class="flex justify-between items-start flex-wrap gap-4 mb-10">
+    <h2 class="text-2xl font-bold text-gray-800">Selamat Datang di Sistem Peminjaman Aset Kampus<br>Institut Teknologi PLN !</h2>
+    
+    <!-- User Dropdown -->
+    <div class="relative">
+      <button id="userBtn" 
+        class="bg-gray-200 px-4 py-2 rounded-full text-sm font-semibold text-gray-800 hover:bg-gray-300">
+        <?= htmlspecialchars($user_name); ?>
+      </button>
+      <div id="userDropdown" 
+           class="hidden absolute right-0 mt-2 w-40 bg-white rounded-md shadow-md border border-gray-200">
+        <a href="halamanutama.php" 
+           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Keluar</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left side -->
+    <div class="lg:col-span-2 space-y-6">
+      <!-- Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white rounded-xl shadow p-6 hover:-translate-y-1 transition">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-12 h-12 flex items-center justify-center rounded-lg bg-gradient-to-r from-blue-400 to-cyan-400 text-white text-2xl">📋</div>
+            <div>
+              <div class="font-semibold">Peminjaman Aktif</div>
+              <div class="text-sm text-gray-500">Total Peminjaman Aktif</div>
             </div>
-            <?php renderMenu($menu_items); ?>
+          </div>
+          <div class="text-3xl font-bold text-blue-500"><?= $total_peminjaman_aktif; ?></div>
         </div>
 
-        <!-- Main Content -->
-        <div class="main-content">
-            <div class="main-container">
-                <div class="header">
-                    <h1>Selamat Datang di Sistem Peminjaman Aset Kampus<br>Institut Teknologi PLN !</h1>
-                    <div class="user-info">
-                        <div class="user-name"><?= htmlspecialchars($user_name); ?></div>
-                        <a href="halaman utama.php">Keluar</a>
-                    </div>
-                </div>
-
-                <div class="content-grid">
-                    <div class="left-side">
-                        <div class="cards-group">
-                            <!-- Active Loans Card -->
-                            <div class="card">
-                                <div class="card-header">
-                                    <div class="card-icon active-loans">📋</div>
-                                    <div>
-                                        <div class="card-title">Peminjaman Aktif</div>
-                                        <div class="card-subtitle">Total Peminjaman Aktif</div>
-                                    </div>
-                                </div>
-                                <div style="font-size: 32px; font-weight: bold; color: #667eea;">
-                                    <?= $total_peminjaman_aktif; ?>
-                                </div>
-                            </div>
-
-                            <!-- Pending Approval Card -->
-                            <div class="card">
-                                <div class="card-header">
-                                    <div class="card-icon pending-approval">⏳</div>
-                                    <div>
-                                        <div class="card-title">Menunggu Persetujuan</div>
-                                        <div class="card-subtitle">Total Menunggu Persetujuan</div>
-                                    </div>
-                                </div>
-                                <div style="font-size: 32px; font-weight: bold; color: #ffa500;">
-                                    <?= $total_menunggu_persetujuan; ?>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Tips Section -->
-                        <div class="card tips">
-                            <div class="tips-header">
-                                <span style="font-size: 24px;">💡</span>
-                                <span style="font-weight: 600; font-size: 18px;">Tips Peminjaman</span>
-                            </div>
-                            <ul>
-                                <li>Ajukan peminjaman minimal 2 hari sebelum tanggal penggunaan</li>
-                                <li>Pastikan mengecek ketersediaan aset terlebih dahulu</li>
-                                <li>Lengkapi form peminjaman dengan detail yang jelas</li>
-                                <li>Kembalikan aset sesuai jadwal yang telah disepakati</li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <!-- Calendar Sidebar -->
-                    <div class="right-side">
-                        <div class="calendar">
-                            <div class="calendar-header">
-                                <div class="calendar-title">Kalender Ketersediaan Aset</div>
-                                <div class="calendar-nav">
-                                    <button class="nav-btn">‹</button>
-                                    <button class="nav-btn">›</button>
-                                </div>
-                            </div>
-                            
-                            <div style="text-align: center; margin-bottom: 20px; font-weight: 600;">
-                                <?= $months[9] . ' 2025'; ?> <!-- September 2025 -->
-                            </div>
-
-                            <div class="calendar-grid">
-                                <!-- Day headers -->
-                                <div class="calendar-day-header">Sun</div>
-                                <div class="calendar-day-header">Mon</div>
-                                <div class="calendar-day-header">Tue</div>
-                                <div class="calendar-day-header">Wed</div>
-                                <div class="calendar-day-header">Thu</div>
-                                <div class="calendar-day-header">Fri</div>
-                                <div class="calendar-day-header">Sat</div>
-
-                                <?php
-                                // Generate calendar days for September 2025
-                                $first_day = mktime(0, 0, 0, 9, 1, 2025);
-                                $first_day_week = date('w', $first_day);
-                                $days_in_month = date('t', $first_day);
-                                
-                                // Previous month days
-                                for ($i = 0; $i < $first_day_week; $i++) {
-                                    $prev_day = 31 - ($first_day_week - 1 - $i);
-                                    echo '<div class="calendar-day other-month">' . $prev_day . '</div>';
-                                }
-                                
-                                // Current month days
-                                for ($day = 1; $day <= $days_in_month; $day++) {
-                                    $class = 'calendar-day';
-                                    if ($day == 25) {
-                                        $class .= ' current'; // Tanggal sekarang
-                                    } elseif (in_array($day, $booked_dates)) {
-                                        $class .= ' booked';
-                                    }
-                                    echo '<div class="' . $class . '">' . $day . '</div>';
-                                }
-                                
-                                // Next month filler days
-                                $total_cells = ceil(($days_in_month + $first_day_week) / 7) * 7;
-                                $remaining_cells = $total_cells - ($days_in_month + $first_day_week);
-                                for ($i = 1; $i <= $remaining_cells; $i++) {
-                                    echo '<div class="calendar-day other-month">' . $i . '</div>';
-                                }
-                                ?>
-                            </div>
-
-                            <div class="calendar-legend">
-                                <div class="legend-item">
-                                    <div class="legend-color legend-booked"></div>
-                                    <span>Booked</span>
-                                </div>
-                                <button style="width: 100%; padding: 12px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; margin-top: 15px; font-weight: 600;">
-                                    Lihat Detail
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+        <div class="bg-white rounded-xl shadow p-6 hover:-translate-y-1 transition">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-12 h-12 flex items-center justify-center rounded-lg bg-gradient-to-r from-yellow-400 to-yellow-200 text-gray-800 text-2xl">⏳</div>
+            <div>
+              <div class="font-semibold">Menunggu Persetujuan</div>
+              <div class="text-sm text-gray-500">Total Menunggu Persetujuan</div>
             </div>
+          </div>
+          <div class="text-3xl font-bold text-yellow-500"><?= $total_menunggu_persetujuan; ?></div>
         </div>
+      </div>
+
+      <!-- Tips -->
+      <div class="bg-gradient-to-r from-yellow-300 to-yellow-200 rounded-xl shadow p-6">
+        <div class="flex items-center gap-2 mb-4">
+          <span class="text-2xl">💡</span>
+          <span class="font-semibold text-lg">Tips Peminjaman</span>
+        </div>
+        <ul class="list-disc list-inside text-gray-800 space-y-1 text-sm">
+          <li>Ajukan peminjaman minimal 2 hari sebelum tanggal penggunaan</li>
+          <li>Pastikan mengecek ketersediaan aset terlebih dahulu</li>
+          <li>Lengkapi form peminjaman dengan detail yang jelas</li>
+          <li>Kembalikan aset sesuai jadwal yang telah disepakati</li>
+        </ul>
+      </div>
     </div>
 
-    <footer style="background: #2c3e50; color: #fff; text-align: center; padding: 10px 0; margin-top: 40px;">
-        © <?= date('Y'); ?> Institut Teknologi PLN - Sistem Peminjaman Aset
-    </footer>
+    <!-- Right side (Calendar) -->
+    <div class="bg-white rounded-xl shadow p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="font-semibold text-lg text-gray-800">Kalender Ketersediaan Aset</h3>
+        <div class="flex gap-2">
+          <button class="w-8 h-8 flex items-center justify-center bg-indigo-500 text-white rounded-md">‹</button>
+          <button class="w-8 h-8 flex items-center justify-center bg-indigo-500 text-white rounded-md">›</button>
+        </div>
+      </div>
+      <div class="text-center font-medium mb-3">September 2025</div>
+      <div class="grid grid-cols-7 text-sm gap-1">
+        <?php
+        $days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        foreach ($days as $d) echo "<div class='text-center font-semibold text-gray-500'>$d</div>";
+        $first_day = mktime(0, 0, 0, 9, 1, 2025);
+        $first_day_week = date('w', $first_day);
+        $days_in_month = date('t', $first_day);
+        for ($i = 0; $i < $first_day_week; $i++) {
+            $prev_day = 31 - ($first_day_week - 1 - $i);
+            echo "<div class='text-gray-300 text-center p-2'>$prev_day</div>";
+        }
+        for ($day = 1; $day <= $days_in_month; $day++) {
+            $class = "text-center p-2 rounded-md cursor-pointer ";
+            if ($day == 25) $class .= "bg-indigo-500 text-white";
+            elseif (in_array($day, $booked_dates)) $class .= "bg-red-500 text-white";
+            else $class .= "hover:bg-indigo-100";
+            echo "<div class='$class'>$day</div>";
+        }
+        $total_cells = ceil(($days_in_month + $first_day_week) / 7) * 7;
+        $remaining = $total_cells - ($days_in_month + $first_day_week);
+        for ($i = 1; $i <= $remaining; $i++) {
+            echo "<div class='text-gray-300 text-center p-2'>$i</div>";
+        }
+        ?>
+      </div>
+      <div class="mt-4">
+        <div class="flex items-center gap-2 text-sm text-gray-600">
+          <span class="w-3 h-3 rounded-full bg-red-500"></span> Booked
+        </div>
+        <button class="mt-4 w-full bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg font-semibold">Lihat Detail</button>
+      </div>
+    </div>
+  </div>
+</main>
 
-    <script>
-      const sidebar = document.getElementById('sidebar');
-      const overlay = document.getElementById('overlay');
-      const hamburgerBtn = document.getElementById('hamburgerBtn');
+<!-- Footer -->
+<footer class="bg-gray-800 text-white text-center py-3 mt-10">
+  © <?= date('Y'); ?> Institut Teknologi PLN - Sistem Peminjaman Aset
+</footer>
 
-      function toggleSidebar() {
-          sidebar.classList.toggle('active');
-          overlay.classList.toggle('active');
-          hamburgerBtn.classList.toggle('active');
-      }
+<script>
+  function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('-translate-x-full');
+    document.getElementById('overlay').classList.toggle('hidden');
+    document.getElementById('hamburgerBtn').classList.toggle('hidden');
+  }
+  function closeSidebar() {
+    document.getElementById('sidebar').classList.add('-translate-x-full');
+    document.getElementById('overlay').classList.add('hidden');
+    document.getElementById('hamburgerBtn').classList.remove('hidden');
+  }
+  function toggleDropdown(id) {
+    const submenu = document.getElementById("submenu-" + id);
+    const icon = document.getElementById("icon-" + id);
+    submenu.classList.toggle("hidden");
+    icon.classList.toggle("rotate-180");
+  }
 
-      function closeSidebar() {
-          sidebar.classList.remove('active');
-          overlay.classList.remove('active');
-          hamburgerBtn.classList.remove('active');
-      }
+  // Dropdown user
+  const userBtn = document.getElementById('userBtn');
+  const userDropdown = document.getElementById('userDropdown');
 
-      function toggleDropdown(id) {
-          const submenu = document.getElementById("submenu-" + id);
-          const icon = document.getElementById("icon-" + id);
-          if (!submenu) return;
+  userBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    userDropdown.classList.toggle('hidden');
+  });
 
-          const parentLi = submenu.closest("li");
-          const parentUl = parentLi ? parentLi.parentElement : null;
-
-          if (parentUl) {
-              const siblingSubmenus = parentUl.querySelectorAll(":scope > .menu-item > .submenu");
-              const siblingIcons = parentUl.querySelectorAll(":scope > .menu-item > a > .menu-icon");
-
-              siblingSubmenus.forEach(menu => {
-                  if (menu !== submenu) menu.classList.remove("active");
-              });
-
-              siblingIcons.forEach(iconEl => {
-                  if (iconEl !== icon) iconEl.style.transform = "rotate(0deg)";
-              });
-          }
-
-          submenu.classList.toggle("active");
-          if (submenu.classList.contains("active")) {
-              if (icon) icon.style.transform = "rotate(180deg)";
-          } else {
-              if (icon) icon.style.transform = "rotate(0deg)";
-          }
-      }
-    </script>
+  document.addEventListener('click', (e) => {
+    if (!userBtn.contains(e.target) && !userDropdown.contains(e.target)) {
+      userDropdown.classList.add('hidden');
+    }
+  });
+</script>
 </body>
 </html>

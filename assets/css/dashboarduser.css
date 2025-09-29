@@ -113,7 +113,7 @@
             max-height: 0;
             overflow: hidden;
             transition: max-height 0.3s ease-out;
-            margin-left: 15px;  /* supaya kelihatan nested */
+            margin-left: 15px;  
             padding-left: 10px;
         }
 
