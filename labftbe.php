@@ -103,12 +103,13 @@ function renderMenu($items, $prefix = 'root') {
 <div id="overlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-40" onclick="closeSidebar()"></div>
 
 <!-- Sidebar -->
-<div id="sidebar" class="fixed top-0 left-0 w-72 h-full bg-gray-800 text-white transform -translate-x-full transition-transform duration-300 z-50">
-  <div class="bg-gray-900 px-5 py-4 font-bold uppercase text-sm tracking-widest">Menu Utama</div>
+<div id="sidebar" class="fixed top-0 left-0 w-72 h-full bg-gray-800 text-white text-sm transform -translate-x-full transition-transform duration-300 z-50">
+  <div class="bg-gray-900 px-5 py-4 font-bold uppercase tracking-widest">Menu Utama</div>
   <nav class="p-2">
     <?php renderMenu($menu_items); ?>
   </nav>
 </div>
+
 
 <!-- Main -->
 <main class="pt-20 px-6">
