@@ -1,6 +1,8 @@
 <?php
 // ================= DATA MENU =================
 $menu_items = [
+        [
+          'title' => 'Beranda', 'url' => 'dashboarduser.php'],
     [
         'title' => 'Daftar Ruangan & Fasilitas',
         'type' => 'dropdown',
@@ -25,7 +27,7 @@ $menu_items = [
     ['title' => 'Riwayat Peminjaman', 'url'  => 'riwayat.php'],
 ];
 
-// ================= DATA RUANGAN =================
+// ================= DATA FASILITAS =================
 $data = [
     ['no'=>1,'nama_fasilitas'=>'Lapangan Futsal','kapasitas'=>'71 Orang s.d 100 Orang','internal_itpln'=>'','eksternal_itpln'=>'','keterangan'=>''],
     ['no'=>2,'nama_fasilitas'=>'Bus Eksekutif','kapasitas'=>'51 Orang s.d 70 Orang','internal_itpln'=>'','eksternal_itpln'=>'','keterangan'=>''],
@@ -67,18 +69,14 @@ function renderMenu($items, $prefix = 'root') {
 </head>
 <body class="bg-gradient-to-br from-[#D1E5EA] to-white min-h-screen">
 
-<!-- Header -->
-<nav class="fixed top-0 left-0 right-0 bg-blue-100 shadow px-4 h-16 z-50 flex items-center gap-4">
+<nav class="fixed top-0 left-0 right-0 bg-[#D1E5EA] shadow px-4 h-16 z-50 flex items-center gap-4">
   <!-- Tombol Hamburger -->
-  <button id="menuBtn" class="w-12 h-12 flex flex-col justify-center items-center bg-gray-800 rounded-lg text-white">
-    <span class="block w-6 h-0.5 bg-white mb-1"></span>
-    <span class="block w-6 h-0.5 bg-white mb-1"></span>
-    <span class="block w-6 h-0.5 bg-white"></span>
-  </button>
+  <button id="hamburgerBtn" onclick="toggleSidebar()" 
+    class="bg-gray-800 text-white p-3 rounded-md">☰</button>
 
   <!-- Search -->
   <form class="flex-1">
-    <input type="text" placeholder="Cari" 
+    <input id="searchInput" type="text" placeholder="Cari" 
       class="w-full px-4 py-2 rounded-full border border-gray-300 text-sm shadow-sm focus:ring focus:ring-blue-200">
   </form>
 
@@ -99,7 +97,7 @@ function renderMenu($items, $prefix = 'root') {
 </nav>
 
 <!-- Overlay -->
-<div id="overlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-40" onclick="closeSidebar()"></div>
+<div id="overlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-40"></div>
 
 <!-- Sidebar -->
 <div id="sidebar" class="fixed top-0 left-0 w-72 h-full bg-gray-800 text-white transform -translate-x-full transition-transform duration-300 z-50">
@@ -113,7 +111,7 @@ function renderMenu($items, $prefix = 'root') {
 <main class="pt-20 px-6">
   <h2 class="text-xl font-semibold mb-4">Daftar Fasilitas</h2>
   <div class="bg-white border-2 border-blue-400 rounded-xl shadow-sm p-4 overflow-x-auto">
-    <table class="w-full border-collapse text-sm">
+    <table class="w-full border-collapse text-sm" id="fasilitasTable">
       <thead>
         <tr class="bg-blue-50 text-gray-700">
           <th class="border border-gray-200 px-4 py-3 text-left">No</th>
@@ -142,13 +140,18 @@ function renderMenu($items, $prefix = 'root') {
   </div>
 </main>
 
+<footer class="fixed bottom-0 left-0 w-full bg-gray-800 text-white text-center py-3">
+  © <?= date('Y'); ?> Institut Teknologi PLN - Sistem Peminjaman Aset
+</footer>
+
+
 <script>
 // Sidebar toggle
-const menuBtn = document.getElementById('menuBtn');
+const hamburgerBtn = document.getElementById('hamburgerBtn');
 const sidebar = document.getElementById('sidebar');
 const overlay = document.getElementById('overlay');
 
-menuBtn.addEventListener('click', () => {
+hamburgerBtn.addEventListener('click', () => {
   sidebar.classList.toggle('-translate-x-full');
   overlay.classList.toggle('hidden');
 });
@@ -179,6 +182,18 @@ document.addEventListener('click', (e) => {
   if (!userBtn.contains(e.target) && !userDropdown.contains(e.target)) {
     userDropdown.classList.add('hidden');
   }
+});
+
+// ================= SEARCH FUNCTION =================
+const searchInput = document.getElementById("searchInput");
+const tableRows = document.querySelectorAll("#fasilitasTable tbody tr");
+
+searchInput.addEventListener("keyup", function () {
+  let keyword = this.value.toLowerCase();
+  tableRows.forEach(row => {
+    let rowText = row.textContent.toLowerCase();
+    row.style.display = rowText.includes(keyword) ? "" : "none";
+  });
 });
 </script>
 </body>

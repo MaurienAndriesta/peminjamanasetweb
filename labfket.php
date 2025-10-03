@@ -29,11 +29,11 @@ $menu_items = [
 
 // ================= DATA RUANGAN =================
 $data = [
-    ['no'=>1,'nama_ruangan'=>'Ruang Kelas Kapasitas','kapasitas'=>'71 Orang s.d 100 Orang','lokasi'=>'','internal_itpln'=>'','eksternal_itpln'=>'','keterangan'=>''],
-    ['no'=>2,'nama_ruangan'=>'Ruang Kelas Kapasitas','kapasitas'=>'51 Orang s.d 70 Orang','lokasi'=>'','internal_itpln'=>'','eksternal_itpln'=>'','keterangan'=>''],
-    ['no'=>3,'nama_ruangan'=>'Ruang Kelas Kapasitas','kapasitas'=>'31 Orang s.d 50 Orang','lokasi'=>'','internal_itpln'=>'','eksternal_itpln'=>'','keterangan'=>''],
-    ['no'=>4,'nama_ruangan'=>'Ruang Kelas Kapasitas','kapasitas'=>'10 Orang s.d 30 Orang','lokasi'=>'','internal_itpln'=>'','eksternal_itpln'=>'','keterangan'=>''],
-    ['no'=>5,'nama_ruangan'=>'Ruang Rapat Soediyatmo','kapasitas'=>'60 Orang','lokasi'=>'','internal_itpln'=>'','eksternal_itpln'=>'','keterangan'=>'']
+    ['no'=>1,'nama_laboratorium'=>'Lab. Fisika','Satuan'=>'Per Hari','lokasi'=>'','internal_itpln'=>'','eksternal_itpln'=>'','keterangan'=>''],
+    ['no'=>2,'nama_laboratorium'=>'Lab. Sistem Kontrol','Satuan'=>'Per Hari','lokasi'=>'','internal_itpln'=>'','eksternal_itpln'=>'','keterangan'=>''],
+    ['no'=>3,'nama_laboratorium'=>'Lab. Mesin-Mesin Listrik','Satuan'=>'Per Hari','lokasi'=>'','internal_itpln'=>'','eksternal_itpln'=>'','keterangan'=>''],
+    ['no'=>4,'nama_laboratorium'=>'Lab. Dasar Teknik Elektro','Satuan'=>'Per Hari','lokasi'=>'','internal_itpln'=>'','eksternal_itpln'=>'','keterangan'=>''],
+    ['no'=>5,'nama_laboratorium'=>'Lab. Smart Electronic System','Satuan'=>'Per Hari','lokasi'=>'','internal_itpln'=>'','eksternal_itpln'=>'','keterangan'=>'']
 ];
 
 // ================= FUNGSI RENDER MENU REKURSIF =================
@@ -65,7 +65,7 @@ function renderMenu($items, $prefix = 'root') {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Halaman Daftar Ruangan Multiguna</title>
+  <title>Halaman Daftar Laboratorium FKET</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gradient-to-br from-[#D1E5EA] to-white min-h-screen">
@@ -101,37 +101,38 @@ function renderMenu($items, $prefix = 'root') {
 <div id="overlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-40" onclick="closeSidebar()"></div>
 
 <!-- Sidebar -->
-<div id="sidebar" class="fixed top-0 left-0 w-72 h-full bg-gray-800 text-white transform -translate-x-full transition-transform duration-300 z-50">
-  <div class="bg-gray-900 px-5 py-4 font-bold uppercase text-sm tracking-widest">Menu Utama</div>
+<div id="sidebar" class="fixed top-0 left-0 w-72 h-full bg-gray-800 text-white text-sm transform -translate-x-full transition-transform duration-300 z-50">
+  <div class="bg-gray-900 px-5 py-4 font-bold uppercase tracking-widest">Menu Utama</div>
   <nav class="p-2">
     <?php renderMenu($menu_items); ?>
   </nav>
 </div>
 
+
 <!-- Main -->
 <main class="pt-20 px-6">
-  <h2 class="text-xl font-semibold mb-4">Daftar Ruangan Multiguna</h2>
+  <h2 class="text-xl font-semibold mb-4">Daftar Laboratorium Fakultas Ketenagalistrikan dan Energi Terbarukan</h2>
   <div class="bg-white border-2 border-blue-400 rounded-xl shadow-sm p-4 overflow-x-auto">
-    <table class="w-full border-collapse text-sm" id="ruanganTable">
+    <table class="w-full border-collapse text-sm">
       <thead>
         <tr class="bg-blue-50 text-gray-700">
           <th class="border border-gray-200 px-4 py-3 text-left">No</th>
           <th class="border border-gray-200 px-4 py-3 text-left">Foto</th>
-          <th class="border border-gray-200 px-4 py-3 text-left">Nama Ruangan</th>
-          <th class="border border-gray-200 px-4 py-3 text-left">Kapasitas</th>
+          <th class="border border-gray-200 px-4 py-3 text-left">Nama Laboratorium</th>
+          <th class="border border-gray-200 px-4 py-3 text-left">Satuan</th>
           <th class="border border-gray-200 px-4 py-3 text-left">Lokasi</th>
           <th class="border border-gray-200 px-4 py-3 text-left">Internal ITPLN</th>
           <th class="border border-gray-200 px-4 py-3 text-left">Eksternal ITPLN</th>
           <th class="border border-gray-200 px-4 py-3 text-left">Keterangan</th>
         </tr>
       </thead>
-      <tbody class="text-gray-800">
+      <tbody id="labTable" class="text-gray-800">
         <?php foreach($data as $row): ?>
         <tr class="hover:bg-blue-50">
           <td class="border border-gray-200 px-4 py-3"><?= $row['no'] ?></td>
           <td class="border border-gray-200 px-4 py-3 text-center">-</td>
-          <td class="border border-gray-200 px-4 py-3"><?= $row['nama_ruangan'] ?></td>
-          <td class="border border-gray-200 px-4 py-3"><?= $row['kapasitas'] ?></td>
+          <td class="border border-gray-200 px-4 py-3"><?= $row['nama_laboratorium'] ?></td>
+          <td class="border border-gray-200 px-4 py-3"><?= $row['Satuan'] ?></td>
           <td class="border border-gray-200 px-4 py-3"><?= $row['lokasi'] ?></td>
           <td class="border border-gray-200 px-4 py-3"><?= $row['internal_itpln'] ?></td>
           <td class="border border-gray-200 px-4 py-3"><?= $row['eksternal_itpln'] ?></td>
@@ -143,10 +144,10 @@ function renderMenu($items, $prefix = 'root') {
   </div>
 </main>
 
+<!-- Footer -->
 <footer class="fixed bottom-0 left-0 w-full bg-gray-800 text-white text-center py-3">
   © <?= date('Y'); ?> Institut Teknologi PLN - Sistem Peminjaman Aset
 </footer>
-
 
 <script>
 // Sidebar toggle
@@ -176,10 +177,11 @@ const userBtn = document.getElementById('userBtn');
 const userDropdown = document.getElementById('userDropdown');
 
 userBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
+  e.stopPropagation(); 
   userDropdown.classList.toggle('hidden');
 });
 
+// Klik di luar -> dropdown nutup
 document.addEventListener('click', (e) => {
   if (!userBtn.contains(e.target) && !userDropdown.contains(e.target)) {
     userDropdown.classList.add('hidden');
@@ -188,11 +190,10 @@ document.addEventListener('click', (e) => {
 
 // ================= SEARCH FUNCTION =================
 const searchInput = document.getElementById("searchInput");
-const tableRows = document.querySelectorAll("#ruanganTable tbody tr");
+const tableRows = document.querySelectorAll("#labTable tr");
 
 searchInput.addEventListener("keyup", function () {
   let keyword = this.value.toLowerCase();
-
   tableRows.forEach(row => {
     let rowText = row.textContent.toLowerCase();
     row.style.display = rowText.includes(keyword) ? "" : "none";

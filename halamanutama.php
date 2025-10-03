@@ -14,10 +14,10 @@ $menu_items = [
         'type' => 'dropdown',
         'icon' => '▼',
         'submenu' => [
-            ['title' => 'Ruangan Multiguna', 'url' => 'ruangmultiguna.php'],
-            ['title' => 'Fasilitas', 'url' => 'fasilitas.php'],
-            ['title' => 'Usaha', 'url' => 'usaha.php'],
-            ['title' => 'Laboratorium', 'url' => 'laboratorium.php']
+            ['title' => 'Ruangan Multiguna', 'url' => 'login.php'],
+            ['title' => 'Fasilitas', 'url' => 'login.php'],
+            ['title' => 'Usaha', 'url' => 'login.php'],
+            ['title' => 'Laboratorium', 'url' => 'login.php']
         ]
     ],
     [
@@ -40,7 +40,7 @@ $menu_items = [
 
   <!-- Tombol Hamburger -->
   <button id="hamburgerBtn" onclick="toggleSidebar()" 
-          class="fixed top-4 left-4 z-50 bg-gray-300 hover:bg-gray-800 text-gray-800 hover:text-white px-3 py-2 rounded-md text-lg">
+          class="fixed top-4 left-2 z-50 bg-gray-800 text-white p-3 rounded-md">
     ☰
   </button>
 

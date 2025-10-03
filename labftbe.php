@@ -1,6 +1,8 @@
 <?php
 // ================= DATA MENU =================
 $menu_items = [
+          [
+          'title' => 'Beranda', 'url' => 'dashboarduser.php'],
     [
         'title' => 'Daftar Ruangan & Fasilitas',
         'type' => 'dropdown',
@@ -68,18 +70,14 @@ function renderMenu($items, $prefix = 'root') {
 </head>
 <body class="bg-gradient-to-br from-[#D1E5EA] to-white min-h-screen">
 
-<!-- Header -->
-<nav class="fixed top-0 left-0 right-0 bg-blue-100 shadow px-4 h-16 z-50 flex items-center gap-4">
+<nav class="fixed top-0 left-0 right-0 bg-[#D1E5EA] shadow px-4 h-16 z-50 flex items-center gap-4">
   <!-- Tombol Hamburger -->
-  <button id="menuBtn" class="w-12 h-12 flex flex-col justify-center items-center bg-gray-800 rounded-lg text-white">
-    <span class="block w-6 h-0.5 bg-white mb-1"></span>
-    <span class="block w-6 h-0.5 bg-white mb-1"></span>
-    <span class="block w-6 h-0.5 bg-white"></span>
-  </button>
+  <button id="hamburgerBtn" onclick="toggleSidebar()" 
+    class="bg-gray-800 text-white p-3 rounded-md">☰</button>
 
   <!-- Search -->
   <form class="flex-1">
-    <input type="text" placeholder="Cari" 
+    <input id="searchInput" type="text" placeholder="Cari" 
       class="w-full px-4 py-2 rounded-full border border-gray-300 text-sm shadow-sm focus:ring focus:ring-blue-200">
   </form>
 
@@ -110,12 +108,11 @@ function renderMenu($items, $prefix = 'root') {
   </nav>
 </div>
 
-
 <!-- Main -->
 <main class="pt-20 px-6">
   <h2 class="text-xl font-semibold mb-4">Daftar Laboratorium Fakultas Teknologi dan Bisnis Energi</h2>
   <div class="bg-white border-2 border-blue-400 rounded-xl shadow-sm p-4 overflow-x-auto">
-    <table class="w-full border-collapse text-sm">
+    <table class="w-full border-collapse text-sm" id="dataTable">
       <thead>
         <tr class="bg-blue-50 text-gray-700">
           <th class="border border-gray-200 px-4 py-3 text-left">No</th>
@@ -147,17 +144,18 @@ function renderMenu($items, $prefix = 'root') {
 </main>
 
 <!-- Footer -->
-<footer class="bg-gray-800 text-white text-center py-3 mt-10">
+<footer class="fixed bottom-0 left-0 w-full bg-gray-800 text-white text-center py-3">
   © <?= date('Y'); ?> Institut Teknologi PLN - Sistem Peminjaman Aset
 </footer>
 
+
 <script>
 // Sidebar toggle
-const menuBtn = document.getElementById('menuBtn');
+const hamburgerBtn = document.getElementById('hamburgerBtn');
 const sidebar = document.getElementById('sidebar');
 const overlay = document.getElementById('overlay');
 
-menuBtn.addEventListener('click', () => {
+hamburgerBtn.addEventListener('click', () => {
   sidebar.classList.toggle('-translate-x-full');
   overlay.classList.toggle('hidden');
 });
@@ -179,15 +177,25 @@ const userBtn = document.getElementById('userBtn');
 const userDropdown = document.getElementById('userDropdown');
 
 userBtn.addEventListener('click', (e) => {
-  e.stopPropagation(); // supaya gak auto ketutup
+  e.stopPropagation(); 
   userDropdown.classList.toggle('hidden');
 });
-
-// Klik di luar -> dropdown nutup
 document.addEventListener('click', (e) => {
   if (!userBtn.contains(e.target) && !userDropdown.contains(e.target)) {
     userDropdown.classList.add('hidden');
   }
+});
+
+// ================= SEARCH FUNCTION =================
+const searchInput = document.getElementById("searchInput");
+const tableRows = document.querySelectorAll("#dataTable tbody tr");
+
+searchInput.addEventListener("keyup", function () {
+  const keyword = this.value.toLowerCase();
+  tableRows.forEach(row => {
+    const rowText = row.textContent.toLowerCase();
+    row.style.display = rowText.includes(keyword) ? "" : "none";
+  });
 });
 </script>
 </body>

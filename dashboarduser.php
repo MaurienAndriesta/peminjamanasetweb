@@ -5,6 +5,8 @@ if (!isset($_SESSION['user'])) {
 }
 
 $menu_items = [
+        [
+          'title' => 'Beranda', 'url' => 'dashboarduser.php'],
     [
         'title' => 'Daftar Ruangan & Fasilitas',
         'type' => 'dropdown',
@@ -143,48 +145,71 @@ $booked_dates = [22, 29];
     </div>
 
     <!-- Right side (Calendar) -->
-    <div class="bg-white rounded-xl shadow p-6">
-      <div class="flex justify-between items-center mb-4">
-        <h3 class="font-semibold text-lg text-gray-800">Kalender Ketersediaan Aset</h3>
-        <div class="flex gap-2">
-          <button class="w-8 h-8 flex items-center justify-center bg-indigo-500 text-white rounded-md">‹</button>
-          <button class="w-8 h-8 flex items-center justify-center bg-indigo-500 text-white rounded-md">›</button>
-        </div>
-      </div>
-      <div class="text-center font-medium mb-3">September 2025</div>
-      <div class="grid grid-cols-7 text-sm gap-1">
-        <?php
-        $days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-        foreach ($days as $d) echo "<div class='text-center font-semibold text-gray-500'>$d</div>";
-        $first_day = mktime(0, 0, 0, 9, 1, 2025);
-        $first_day_week = date('w', $first_day);
-        $days_in_month = date('t', $first_day);
-        for ($i = 0; $i < $first_day_week; $i++) {
-            $prev_day = 31 - ($first_day_week - 1 - $i);
-            echo "<div class='text-gray-300 text-center p-2'>$prev_day</div>";
-        }
-        for ($day = 1; $day <= $days_in_month; $day++) {
-            $class = "text-center p-2 rounded-md cursor-pointer ";
-            if ($day == 25) $class .= "bg-indigo-500 text-white";
-            elseif (in_array($day, $booked_dates)) $class .= "bg-red-500 text-white";
-            else $class .= "hover:bg-indigo-100";
-            echo "<div class='$class'>$day</div>";
-        }
-        $total_cells = ceil(($days_in_month + $first_day_week) / 7) * 7;
-        $remaining = $total_cells - ($days_in_month + $first_day_week);
-        for ($i = 1; $i <= $remaining; $i++) {
-            echo "<div class='text-gray-300 text-center p-2'>$i</div>";
-        }
-        ?>
-      </div>
-      <div class="mt-4">
-        <div class="flex items-center gap-2 text-sm text-gray-600">
-          <span class="w-3 h-3 rounded-full bg-red-500"></span> Booked
-        </div>
-        <button class="mt-4 w-full bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg font-semibold">Lihat Detail</button>
-      </div>
-    </div>
+<div class="bg-white rounded-xl shadow p-6">
+  <div class="flex justify-between items-center mb-4">
+    <h3 class="font-semibold text-lg text-gray-800">Kalender Ketersediaan Aset</h3>
   </div>
+  <?php
+    // Ambil bulan & tahun real-time
+    $month = date('n');
+    $year  = date('Y');
+    $month_name = date('F Y');
+
+    $first_day = mktime(0, 0, 0, $month, 1, $year);
+    $first_day_week = date('w', $first_day);
+    $days_in_month = date('t', $first_day);
+
+    // Tanggal booked (contoh, bisa ambil dari DB)
+    $booked_dates = [
+        5 => "Ruang Aula dipakai Seminar",
+        12 => "Lab FTBE full",
+        22 => "Ruang Rapat dipakai",
+        29 => "Aula Kampus sudah dipesan",
+    ];
+  ?>
+  <div class="text-center font-medium mb-3"><?= $month_name; ?></div>
+  <div class="grid grid-cols-7 text-sm gap-1 relative">
+    <?php
+      $days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+      foreach ($days as $d) echo "<div class='text-center font-semibold text-gray-500'>$d</div>";
+
+      // Kosong sebelum tanggal 1
+      for ($i = 0; $i < $first_day_week; $i++) {
+          echo "<div class='text-gray-300 text-center p-2'></div>";
+      }
+
+      // Isi tanggal
+      for ($day = 1; $day <= $days_in_month; $day++) {
+          $class = "relative text-center p-2 rounded-md cursor-pointer ";
+          $tooltip = "";
+
+          if (isset($booked_dates[$day])) {
+              $class .= "bg-red-500 text-white group";
+              $tooltip = "<div class='absolute z-10 hidden group-hover:block bg-black text-white text-xs rounded py-1 px-2 -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap'>{$booked_dates[$day]}</div>";
+          } else {
+              $class .= "hover:bg-indigo-100";
+          }
+
+          echo "<div class='group $class'>$day $tooltip</div>";
+      }
+
+      // Sisanya biar genap
+      $total_cells = ceil(($days_in_month + $first_day_week) / 7) * 7;
+      $remaining = $total_cells - ($days_in_month + $first_day_week);
+      for ($i = 1; $i <= $remaining; $i++) {
+          echo "<div class='text-gray-300 text-center p-2'></div>";
+      }
+    ?>
+  </div>
+
+  <div class="mt-4">
+    <div class="flex items-center gap-2 text-sm text-gray-600">
+      <span class="w-3 h-3 rounded-full bg-red-500"></span> Booked
+    </div>
+    <button class="mt-4 w-full bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg font-semibold">Lihat Detail</button>
+  </div>
+</div>
+
 </main>
 
 <!-- Footer -->
