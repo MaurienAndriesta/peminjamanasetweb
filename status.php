@@ -182,6 +182,8 @@ function renderMenu($items, $prefix = 'root') {
   <?php endforeach; ?>
 </div>
 
+
+
 <script>
 // Sidebar toggle
 const menuBtn = document.getElementById('menuBtn');

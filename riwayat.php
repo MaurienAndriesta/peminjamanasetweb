@@ -41,6 +41,13 @@ $peminjaman = [
         "waktu" => "08:00 - 11:30",
         "agenda" => "Workshop Nasional",
         "status" => "Ditolak"
+    ],
+    [
+        "nama" => "Ruang Auditorium",
+        "tanggal" => "02 Oktober 2025",
+        "waktu" => "13:00 - 16:30",
+        "agenda" => "Seminar AI",
+        "status" => "Selesai"
     ]
 ];
 
@@ -99,7 +106,6 @@ function renderMenu($items, $prefix = 'root') {
       <button id="menuBtn" class="p-2 bg-gray-800 text-white rounded-md shadow-md">
         ☰
       </button>
-      <h2 class="text-2xl font-bold">HALAMAN RIWAYAT PEMINJAMAN</h2>
     </div>
   </div>
 
@@ -132,9 +138,10 @@ function renderMenu($items, $prefix = 'root') {
     </div>
 
     <!-- Search -->
-    <div class="flex items-center mb-6">
-      <input type="text" placeholder="Search .." class="w-full border rounded px-3 py-2 focus:outline-none">
-    </div>
+  <form class="flex-1">
+    <input id="searchInput" type="text" placeholder="Cari" 
+      class="w-full px-4 py-2 rounded-full border border-gray-300 text-sm shadow-sm focus:ring focus:ring-blue-200">
+  </form>
 
     <!-- Data Peminjaman -->
     <div class="space-y-4">
@@ -181,6 +188,7 @@ function toggleDropdown(id) {
   submenu.classList.toggle('hidden');
   icon.textContent = submenu.classList.contains('hidden') ? '▼' : '▲';
 }
+
 </script>
 </body>
 </html>
