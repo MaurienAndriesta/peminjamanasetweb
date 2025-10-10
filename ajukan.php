@@ -1,7 +1,7 @@
 <?php
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nama       = $_POST['nama'] ?? '';
-    $status     = $_POST['status'] ?? ''; // status peminjam
+    $status     = $_POST['status'] ?? '';
     $kategori   = $_POST['kategori'] ?? '';
     $subpilihan = $_POST['subpilihan'] ?? '';
     $fakultas   = $_POST['fakultas'] ?? '';
@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         move_uploaded_file($_FILES['surat']['tmp_name'], $target);
     }
 
-    echo "<div class='p-4 bg-green-100 text-green-700'>Form berhasil dikirim!</div>";
+    echo "<div class='p-4 bg-green-100 text-green-700 text-center animate-fadeIn'>Form berhasil dikirim!</div>";
 }
 ?>
 
@@ -29,10 +29,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta charset="UTF-8">
   <title>Pengajuan Peminjaman Aset</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Fade-in animasi lembut */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fadeIn {
+      animation: fadeIn 0.6s ease forwards;
+    }
+
+    /* Efek hover interaktif pada elemen form */
+    input:hover, select:hover, textarea:hover {
+      transform: scale(1.02);
+      transition: all 0.2s ease-in-out;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      border-color: #3b82f6;
+    }
+
+    /* Hover tombol */
+    button {
+      transition: all 0.3s ease;
+    }
+    button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 14px rgba(0,0,0,0.2);
+    }
+  </style>
 </head>
 <body class="bg-[#D1E5EA] min-h-screen flex justify-center items-start py-10">
 
-  <div class="bg-white shadow-xl rounded-lg w-full max-w-2xl">
+  <div class="bg-white shadow-xl rounded-lg w-full max-w-2xl animate-fadeIn">
     <!-- Header -->
     <div class="bg-gray-700 text-white text-center py-4 rounded-t-lg">
       <h1 class="text-lg font-bold">PENGAJUAN PEMINJAMAN ASET</h1>
@@ -58,6 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </select>
       </div>
 
+      
       <!-- Kategori -->
       <div>
         <label class="block font-medium">Kategori <span class="text-red-500">*</span></label>
@@ -179,8 +207,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <select name="tarif_lab" class="mt-1 w-full border rounded-md p-2">
             <option value="">Pilih</option>
             <option value="Mahasiswa">Mahasiswa</option>
-            <option value="Ruangan">Ruangan</option>
-            <option value="Peralatan">Peralatan</option>
+            <option value="Internal">Internal</option>
+            <option value="Eksternal">Eksternal</option>
           </select>
         </div>
       </div>
@@ -224,7 +252,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     const tarifSelect = document.getElementById('tarif');
     const tarifLabSelect = document.querySelector('select[name="tarif_lab"]');
 
-    // Jika kategori dipilih
     kategoriSelect.addEventListener('change', function () {
       ruanganWrapper.classList.add('hidden');
       fasilitasWrapper.classList.add('hidden');
@@ -234,46 +261,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       labFTBE.classList.add('hidden');
       labFTEN.classList.add('hidden');
 
-      if (this.value === 'Ruang Multiguna') {
-        ruanganWrapper.classList.remove('hidden');
-      } else if (this.value === 'Fasilitas') {
-        fasilitasWrapper.classList.remove('hidden');
-      } else if (this.value === 'Usaha') {
-        usahaWrapper.classList.remove('hidden');
-      } else if (this.value === 'Laboratorium') {
+      if (this.value === 'Ruang Multiguna') ruanganWrapper.classList.remove('hidden');
+      else if (this.value === 'Fasilitas') fasilitasWrapper.classList.remove('hidden');
+      else if (this.value === 'Usaha') usahaWrapper.classList.remove('hidden');
+      else if (this.value === 'Laboratorium') {
         fakultasWrapper.classList.remove('hidden');
         tarifLabWrapper.classList.remove('hidden');
       }
     });
 
-    // Jika fakultas dipilih
     fakultasSelect.addEventListener('change', function () {
       labFTBE.classList.add('hidden');
       labFTEN.classList.add('hidden');
-
-      if (this.value === 'FTBE') {
-        labFTBE.classList.remove('hidden');
-      } else if (this.value === 'FTEN') {
-        labFTEN.classList.remove('hidden');
-      }
+      if (this.value === 'FTBE') labFTBE.classList.remove('hidden');
+      else if (this.value === 'FTEN') labFTEN.classList.remove('hidden');
     });
 
-    // Status Peminjam (atur tarif otomatis)
     statusSelect.addEventListener('change', function () {
-      if (this.value === 'Mahasiswa') {
-        // Tarif umum dikunci
-        tarifSelect.value = 'Mahasiswa';
+      const status = this.value;
+      tarifSelect.innerHTML = '';
+      tarifLabSelect.innerHTML = '';
+
+      if (status === 'Mahasiswa') {
+        tarifSelect.innerHTML = '<option value="Mahasiswa" selected>Mahasiswa</option>';
         tarifSelect.setAttribute('disabled', 'disabled');
-
-        // Tarif Lab juga dikunci
-        tarifLabSelect.value = 'Mahasiswa';
+        tarifLabSelect.innerHTML = '<option value="Mahasiswa" selected>Mahasiswa</option>';
         tarifLabSelect.setAttribute('disabled', 'disabled');
-      } else {
-        // Kembalikan normal
-        tarifSelect.value = '';
+      } else if (status === 'Umum') {
+        tarifSelect.innerHTML = `
+          <option value="">Pilih</option>
+          <option value="Internal">Internal</option>
+          <option value="Eksternal">Eksternal</option>
+        `;
         tarifSelect.removeAttribute('disabled');
-
-        tarifLabSelect.value = '';
+        tarifLabSelect.innerHTML = `
+          <option value="">Pilih</option>
+          <option value="Internal">Internal</option>
+          <option value="Eksternal">Eksternal</option>
+        `;
+        tarifLabSelect.removeAttribute('disabled');
+      } else {
+        tarifSelect.innerHTML = '<option value="">Pilih</option>';
+        tarifSelect.removeAttribute('disabled');
+        tarifLabSelect.innerHTML = '<option value="">Pilih</option>';
         tarifLabSelect.removeAttribute('disabled');
       }
     });

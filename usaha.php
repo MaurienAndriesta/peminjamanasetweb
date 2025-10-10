@@ -1,4 +1,11 @@
 <?php
+session_start();
+include 'koneksi.php';
+
+if (!isset($_SESSION['fullname'])) {
+    header("Location: login.php");
+    exit;
+}
 // ================= DATA MENU =================
 $menu_items = [
         [
@@ -27,12 +34,18 @@ $menu_items = [
     ['title' => 'Riwayat Peminjaman', 'url'  => 'riwayat.php'],
 ];
 
-// ================= DATA USAHA =================
-$data = [
-    ['no'=>1,'nama_usaha'=>'Kantin Mahasiswa','kapasitas'=>'uk 2meter x 2 meter','internal_itpln'=>'','eksternal_itpln'=>'','keterangan'=>''],
-    ['no'=>2,'nama_usaha'=>'Ruang Tamu','kapasitas'=>'Termasuk Penempatan 1 Unit','internal_itpln'=>'','eksternal_itpln'=>'','keterangan'=>''],
-    ['no'=>3,'nama_usaha'=>'Pemasangan Antena','kapasitas'=>'1 antena','internal_itpln'=>'','eksternal_itpln'=>'','keterangan'=>''],
-];
+// ================= AMBIL DATA USAHA DARI DATABASE =================
+$data = [];
+$result = $koneksi->query("SELECT * FROM usaha ORDER BY id ASC");
+
+if ($result && $result->num_rows > 0) {
+    while ($row = $result->fetch_assoc()) {
+        $data[] = $row;
+    }
+} else {
+    echo "<p class='text-red-500'>Tidak ada data usaha.</p>";
+}
+
 
 // ================= FUNGSI RENDER MENU REKURSIF =================
 function renderMenu($items, $prefix = 'root') {
@@ -83,7 +96,7 @@ function renderMenu($items, $prefix = 'root') {
   <!-- User -->
   <div class="relative">
     <button id="userBtn" class="flex items-center gap-2 bg-gray-200 px-4 py-2 rounded-full text-sm shadow-sm">
-      <span class="font-medium">Nama Pengguna</span> 
+      <span class="font-medium"><?= htmlspecialchars($_SESSION['fullname']); ?></span>
     </button>
     <!-- Dropdown User -->
     <div id="userDropdown" 
@@ -100,12 +113,15 @@ function renderMenu($items, $prefix = 'root') {
 <div id="overlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-40" onclick="closeSidebar()"></div>
 
 <!-- Sidebar -->
-<div id="sidebar" class="fixed top-0 left-0 w-72 h-full bg-gray-800 text-white transform -translate-x-full transition-transform duration-300 z-50">
-  <div class="bg-gray-900 px-5 py-4 font-bold uppercase text-sm tracking-widest">Menu Utama</div>
-  <nav class="p-2">
+<div id="sidebar" class="fixed top-0 left-0 w-72 h-full bg-gray-800 text-white text-base transform -translate-x-full transition-transform duration-300 z-50 shadow-xl">
+  <div class="bg-gray-900 px-6 py-5 font-bold uppercase tracking-widest text-center border-b border-gray-700 text-lg">
+    Menu Utama
+  </div>
+  <nav class="p-3 space-y-1">
     <?php renderMenu($menu_items); ?>
   </nav>
 </div>
+
 
 <!-- Main -->
 <main class="pt-20 px-6">
@@ -118,7 +134,6 @@ function renderMenu($items, $prefix = 'root') {
           <th class="border border-gray-200 px-4 py-3 text-left">Foto</th>
           <th class="border border-gray-200 px-4 py-3 text-left">Nama Usaha</th>
           <th class="border border-gray-200 px-4 py-3 text-left">Kapasitas</th>
-          <th class="border border-gray-200 px-4 py-3 text-left">Internal ITPLN</th>
           <th class="border border-gray-200 px-4 py-3 text-left">Eksternal ITPLN</th>
           <th class="border border-gray-200 px-4 py-3 text-left">Keterangan</th>
         </tr>
@@ -127,10 +142,26 @@ function renderMenu($items, $prefix = 'root') {
         <?php foreach($data as $row): ?>
         <tr class="hover:bg-blue-50">
           <td class="border border-gray-200 px-4 py-3"><?= $row['no'] ?></td>
-          <td class="border border-gray-200 px-4 py-3 text-center">-</td>
+          <td class="border border-gray-200 px-4 py-3 text-center">
+  <?php if (!empty($row['foto'])): ?>
+    <div class="flex flex-col items-center">
+      <img src="uploads/ruangan/<?= htmlspecialchars($row['foto']); ?>" 
+           alt="Foto <?= htmlspecialchars($row['nama_usaha']); ?>" 
+           class="w-20 h-16 object-cover rounded-md shadow cursor-pointer"
+           onclick="showImageModal('uploads/ruangan/<?= htmlspecialchars($row['foto']); ?>')">
+
+      <button 
+        onclick="showImageModal('uploads/ruangan/<?= htmlspecialchars($row['foto']); ?>')" 
+        class="mt-1 text-blue-600 text-xs hover:underline">
+        Lihat Foto
+      </button>
+    </div>
+  <?php else: ?>
+    <span class="text-gray-400 italic">Tidak ada foto</span>
+  <?php endif; ?>
+</td>
           <td class="border border-gray-200 px-4 py-3"><?= $row['nama_usaha'] ?></td>
           <td class="border border-gray-200 px-4 py-3"><?= $row['kapasitas'] ?></td>
-          <td class="border border-gray-200 px-4 py-3"><?= $row['internal_itpln'] ?></td>
           <td class="border border-gray-200 px-4 py-3"><?= $row['eksternal_itpln'] ?></td>
           <td class="border border-gray-200 px-4 py-3"><?= $row['keterangan'] ?></td>
         </tr>
@@ -138,6 +169,16 @@ function renderMenu($items, $prefix = 'root') {
       </tbody>
     </table>
   </div>
+  <div id="imageModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50">
+  <div class="relative max-w-4xl">
+    <img id="modalImage" src="" alt="Foto Ruangan" class="rounded-lg shadow-2xl max-h-[90vh]">
+    <button 
+      onclick="closeImageModal()" 
+      class="absolute -top-4 -right-4 bg-white rounded-full p-2 shadow hover:bg-gray-100 text-lg font-bold">
+      ✕
+    </button>
+  </div>
+</div>
 </main>
 
 <footer class="fixed bottom-0 left-0 w-full bg-gray-800 text-white text-center py-3">
@@ -195,6 +236,16 @@ searchInput.addEventListener("keyup", function () {
     row.style.display = rowText.includes(keyword) ? "" : "none";
   });
 });
+
+// ================= MODAL FOTO =================
+function showImageModal(src) {
+  document.getElementById('modalImage').src = src;
+  document.getElementById('imageModal').classList.remove('hidden');
+}
+
+function closeImageModal() {
+  document.getElementById('imageModal').classList.add('hidden');
+}
 </script>
 </body>
 </html>

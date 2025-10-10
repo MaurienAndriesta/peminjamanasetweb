@@ -68,12 +68,15 @@ $booked_dates = [22, 29];
 <body class="bg-gradient-to-br from-[#D1E5EA] to-white min-h-screen">
 
 <!-- Sidebar -->
-<div id="sidebar" class="fixed top-0 left-0 w-72 h-full bg-gray-800 text-white transform -translate-x-full transition-transform duration-300 z-50">
-  <div class="bg-gray-900 px-5 py-4 font-bold uppercase text-sm tracking-widest">Menu Utama</div>
-  <nav class="p-2">
+<div id="sidebar" class="fixed top-0 left-0 w-72 h-full bg-gray-800 text-white text-base transform -translate-x-full transition-transform duration-300 z-50 shadow-xl">
+  <div class="bg-gray-900 px-6 py-5 font-bold uppercase tracking-widest text-center border-b border-gray-700 text-lg">
+    Menu Utama
+  </div>
+  <nav class="p-3 space-y-1">
     <?php renderMenu($menu_items); ?>
   </nav>
 </div>
+
 
 <!-- Overlay -->
 <div id="overlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-40" onclick="closeSidebar()"></div>

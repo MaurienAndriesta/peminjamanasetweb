@@ -1,20 +1,36 @@
 <?php
-// Proses login bisa kamu tambahkan di sini
 session_start();
+include 'koneksi.php'; // koneksi database
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = $_POST['email'] ?? '';
     $password = $_POST['password'] ?? '';
 
-    // contoh validasi sederhana
-    if ($email === "admin@itpln.ac.id" && $password === "12345") {
-        $_SESSION['user'] = $email;
-        header("Location: dashboard.php");
-        exit;
+    // Cek user di database
+    $stmt = $koneksi->prepare("SELECT * FROM users WHERE email = ?");
+
+    $stmt->bind_param("s", $email);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result->num_rows > 0) {
+        $user = $result->fetch_assoc();
+
+        // Verifikasi password (pastikan register pakai password_hash)
+        if (password_verify($password, $user['password'])) {
+            $_SESSION['user'] = $user['fullname'];
+            $_SESSION['fullname'] = $user['fullname']; // opsional
+            header("Location: dashboarduser.php");
+            exit;
+        } else {
+            $error = "Password salah!";
+        }
     } else {
-        $error = "Email atau Password salah!";
+        $error = "Email tidak ditemukan!";
     }
 }
 ?>
+
 
 
 <!DOCTYPE html>
@@ -135,7 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <!-- Bagian Kiri -->
     <div class="left">
       <div class="switch-tab">
-        <a href="register.php">Register</a>
+        
         <a href="login.php" class="active">Login</a>
       </div>
     </div>
@@ -150,7 +166,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <input type="password" name="password" placeholder="Password" required>
           <button type="submit">Login</button>
           <div class="extra">
-            <a href="#">Forgot Password?</a>
+            <div class="extra">
+            <a href="register.php">Belum Punya Akun? Register Sekarang!</a>
+          </div>
+
           </div>
         </form>
         <?php if (!empty($error)): ?>

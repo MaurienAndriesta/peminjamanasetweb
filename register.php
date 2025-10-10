@@ -1,6 +1,7 @@
 <?php
-// Proses register sederhana
 session_start();
+include 'koneksi.php';
+
 $success = "";
 $error = "";
 
@@ -9,17 +10,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email    = $_POST['email'] ?? '';
     $password = $_POST['password'] ?? '';
 
-    // contoh simpan ke file (sementara), nanti bisa ganti ke database
     if (!empty($name) && !empty($email) && !empty($password)) {
-        $hashed = password_hash($password, PASSWORD_DEFAULT);
-        $data = $name . "|" . $email . "|" . $hashed . PHP_EOL;
-        file_put_contents("users.txt", $data, FILE_APPEND);
-        $success = "Registrasi berhasil! Silakan login.";
+        // Cek apakah email sudah terdaftar
+        $check = $koneksi->prepare("SELECT id FROM users WHERE email = ?");
+        $check->bind_param("s", $email);
+        $check->execute();
+        $result = $check->get_result();
+
+        if ($result->num_rows > 0) {
+            $error = "Email sudah terdaftar!";
+        } else {
+            // Simpan user baru
+            $hashed = password_hash($password, PASSWORD_DEFAULT);
+            $stmt = $koneksi->prepare("INSERT INTO users (fullname, email, password) VALUES (?, ?, ?)");
+            $stmt->bind_param("sss", $name, $email, $hashed);
+
+            if ($stmt->execute()) {
+                $success = "Registrasi berhasil! Silakan login.";
+            } else {
+                $error = "Terjadi kesalahan saat menyimpan data!";
+            }
+
+            $stmt->close();
+        }
+        $check->close();
     } else {
         $error = "Semua field wajib diisi!";
     }
 }
 ?>
+
 
 <!DOCTYPE html>
 <html lang="id">
