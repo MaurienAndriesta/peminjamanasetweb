@@ -2,32 +2,27 @@ body {
   font-family: Arial, sans-serif;
   display: flex;
   margin: 0;
+  background: #f0f4f8;
 }
 
-/* Sidebar */
+/* === SIDEBAR === */
 .sidebar {
   width: 250px;
-  background: #d7eaea;
-  padding: 15px 0;
-  height: 100vh;
+  background: #fff;
+  border-right: 1px solid #ccc;
+  padding: 20px 0;
   position: fixed;
   left: 0;
   top: 0;
+  bottom: 0;
   transition: width 0.3s;
   overflow-x: hidden;
+  z-index: 1000;
 }
 .sidebar.collapsed {
   width: 60px;
 }
 
-.sidebar h2 {
-  border-bottom: 1px solid #333;
-  padding: 0 16px 10px;
-  font-size: 14px;
-  color: #555;
-}
-
-/* Menu */
 .menu {
   list-style: none;
   padding: 0;
@@ -39,72 +34,111 @@ body {
 .menu a {
   display: flex;
   align-items: center;
-  padding: 10px 16px;
+  padding: 10px 20px;
   text-decoration: none;
   color: #333;
-  border-radius: 8px;
-  transition: background 0.3s;
-}
-.menu a.active {
-  background: #1f7a8c;
-  color: #fff;
-  font-weight: bold;
+  border-radius: 10px;
+  transition: all 0.2s;
+  white-space: nowrap;
 }
 .menu a:hover {
-  background: #e1f4f9;
+  background: #1f7a8c;
+  color: #fff;
 }
-.menu a i {
-  font-style: normal;
-  font-size: 20px;
-  margin-right: 12px;
-  width: 20px;
-  text-align: center;
-  color: #1f7a8c;
+
+/* --- LOGIKA HIGHLIGHT MENU AKTIF (FINAL REVISION) --- */
+
+.menu a.active {
+  /* Gaya highlight utama */
+  background: #1f7a8c;
+  color: #fff;
+  font-weight: 600;
+  /* Hilangkan border-radius agar menyatu saat collapsed */
+  border-radius: 0;
 }
 .menu a.active i {
   color: #fff;
 }
-.menu a span {
-  margin-left: 10px;
-  flex: 1;
+
+/* KHUSUS MODE COLLAPSED */
+.sidebar.collapsed .menu a {
+  /* Padding untuk menyeimbangkan ikon di tengah area 60px */
+  padding: 10px 0;
+  justify-content: center; /* Memastikan ikon di tengah */
+  width: 100%; /* Memastikan area link mengisi seluruh 60px */
 }
 
-/* Arrow pakai border */
+/* Menggambar latar belakang aktif di mode COLLAPSED */
+.sidebar.collapsed .menu a.active {
+  /* Paksa background muncul di seluruh area saat collapsed */
+  background: #1f7a8c;
+  color: #fff;
+  /* Tambahkan border-radius melengkung pada link di mode collapsed */
+  border-radius: 10px;
+  /* Agar kotak biru terlihat menonjol dari latar belakang putih sidebar */
+  margin: 0 5px;
+  width: auto; /* Biarkan margin menahan lebar */
+}
+/* ---------------------------------------------------- */
+
+.menu a i {
+  margin-right: 10px;
+}
+.sidebar.collapsed .menu a span {
+  display: none;
+}
+.sidebar.collapsed .menu a i {
+  margin: 0 auto;
+}
+
+/* Arrow */
 .arrow {
   margin-left: auto;
-  width: 0;
-  height: 0;
-  border-left: 6px solid #333;
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
   transition: transform 0.3s;
 }
 .dropdown.open .arrow {
-  transform: rotate(90deg);
+  transform: rotate(180deg);
 }
 
 /* Submenu */
 .submenu {
   display: none;
-  padding-left: 30px;
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
   background: #f9f9f9;
 }
+
+.submenu li a {
+  display: flex;
+  align-items: center;
+  /* Memberi indentasi */
+  padding: 10px 20px 10px 35px;
+  text-decoration: none;
+  font-size: 14px;
+  color: #333;
+  border-radius: 6px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.submenu li a:hover,
+.submenu li a.active {
+  background: #1f7a8c;
+  color: #fff;
+  font-weight: 600;
+}
+
 .dropdown.open .submenu {
   display: block;
 }
-.submenu li a {
-  display: block;
-  padding: 8px 16px;
-  font-size: 14px;
-  color: #444;
-}
-.submenu li a:hover {
-  color: #1f7a8c;
+.sidebar.collapsed .submenu {
+  display: none !important;
 }
 
-/* Main */
+/* === MAIN === */
 .main {
-  margin-left: 60px; /* default = sidebar tertutup */
+  margin-left: 60px;
   flex: 1;
   padding: 20px;
   transition: margin-left 0.3s;
@@ -112,8 +146,14 @@ body {
 .sidebar:not(.collapsed) ~ .main {
   margin-left: 250px;
 }
+.content {
+  background: #fff;
+  padding: 30px;
+  border-radius: 15px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
 
-/* Statistik */
+/* ... (Sisa CSS Dashboard Stats & Riwayat tidak berubah) ... */
 .stats {
   display: flex;
   gap: 15px;
@@ -125,18 +165,26 @@ body {
   border-radius: 8px;
   font-weight: bold;
   background: #ccc;
+  color: #333;
 }
 .box.success {
-  background: #a8f0a5;
+  background: #28a745;
+  color: #fff;
 }
 .box.warning {
-  background: #f8e38f;
+  background: #ffc107;
+  color: #333;
 }
 .box.danger {
-  background: #f5a1a1;
+  background: #dc3545;
+  color: #fff;
+}
+.box.info {
+  background: #17a2b8;
+  color: #fff;
 }
 
-/* Riwayat */
+/* === RIWAYAT === */
 .riwayat .item {
   background: #eef;
   margin: 10px 0;
@@ -154,28 +202,4 @@ body {
 }
 .status.danger {
   color: red;
-}
-
-/* Biar teks di semua menu konsisten */
-.menu a span {
-  margin-left: 10px;
-  flex: 1;
-  text-align: left; /* teks selalu rata kiri */
-}
-
-/* Arrow biar tempatnya tetap ada */
-.menu a .arrow {
-  width: 0;
-  height: 0;
-  border-left: 6px solid #333;
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
-  margin-left: auto;
-  transition: transform 0.3s;
-}
-
-/* Kalau bukan dropdown, tetap kasih dummy arrow biar rata */
-.menu a.no-arrow .arrow {
-  border: none;
-  width: 12px; /* reserve space */
 }
