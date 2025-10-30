@@ -1,12 +1,15 @@
 <?php
+// Include database configuration
 require_once 'config/database.php';
+
+// Initialize database connection
 $db = new Database();
 
-// Inisialisasi pesan
+// Initialize messages
 $success_message = null;
 $error_message = null;
 
-// Pesan sukses dari redirect
+// --- LOGIC PENANGANAN PESAN SUKSES (dari redirect) ---
 if (isset($_GET['status'])) {
     if ($_GET['status'] === 'success_edit') {
         $success_message = "✅ Data ruangan berhasil diperbarui!";
@@ -17,96 +20,104 @@ if (isset($_GET['status'])) {
     }
 }
 
-// Hapus data ruangan (Soft Delete)
+// Handle Delete Action
 if (isset($_GET['action']) && $_GET['action'] == 'delete' && isset($_GET['id'])) {
     $id = (int)$_GET['id'];
     try {
-        $db->query("UPDATE ruangan_multiguna SET status = 'tidak_aktif' WHERE id = :id");
+        $db->query("UPDATE ruangan_multiguna SET status = 'tidak_aktif' WHERE id = :id"); 
         $db->bind(':id', $id);
         if ($db->execute()) {
             header('Location: dataruangmultiguna_admin.php?status=success_delete');
             exit;
         } else {
-            $error_message = "Gagal menonaktifkan data ruangan.";
+            $error_message = "Gagal menghapus data ruangan";
         }
     } catch (Exception $e) {
-        $error_message = "Terjadi kesalahan: " . $e->getMessage();
+        $error_message = "Gagal menghapus data: " . $e->getMessage();
     }
 }
 
-// Pencarian
-$search = $_GET['search'] ?? '';
+// --- PAGINATION & SEARCH LOGIC ---
+$limit = 5;
+$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$offset = ($page - 1) * $limit;
+$search = isset($_GET['search']) ? $_GET['search'] : '';
 $search_query = '';
 $search_param = '';
+
 if (!empty($search)) {
     $search_query = " AND (nama LIKE :search OR kapasitas LIKE :search OR lokasi LIKE :search)";
-    $search_param = "%$search%";
+    $search_param = '%' . $search . '%';
 }
 
+$ruangan_data = [];
+$total_records = 0;
+
 try {
+    // Hitung Total Records
+    $db->query("SELECT COUNT(*) as total FROM ruangan_multiguna WHERE status = 'aktif'" . $search_query);
+    if (!empty($search)) {
+        $db->bind(':search', $search_param);
+    }
+    $total_records = $db->single()['total'];
+    $total_pages = ceil($total_records / $limit);
+
+    // Ambil Data dengan Limit & Offset
     $db->query("SELECT id, nama, kapasitas, lokasi, tarif_internal, tarif_eksternal, created_at 
                 FROM ruangan_multiguna 
-                WHERE status = 'aktif' $search_query
-                ORDER BY created_at DESC");
-    if (!empty($search)) $db->bind(':search', $search_param);
-    $ruangan = $db->resultSet();
+                WHERE status = 'aktif'" . $search_query . " 
+                ORDER BY created_at DESC 
+                LIMIT :limit OFFSET :offset");
+
+    if (!empty($search)) {
+        $db->bind(':search', $search_param);
+    }
+    $db->bind(':limit', $limit, PDO::PARAM_INT);
+    $db->bind(':offset', $offset, PDO::PARAM_INT);
+    
+    $ruangan_data = $db->resultSet();
+
 } catch (Exception $e) {
-    $error_message = "Kesalahan database: " . $e->getMessage();
-    $ruangan = [];
+    $error_message = "Terjadi kesalahan database: " . $e->getMessage();
+    $ruangan_data = [];
 }
 ?>
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Data Ruangan Multiguna</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
-<style>
-body { 
-    font-family: 'Poppins', sans-serif; 
-}
-.text-dark-accent { color: #202938; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Ruangan Multiguna</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Poppins', sans-serif; 
+        }
+        .text-dark-accent { color: #202938; }
 
-/* Responsive Sidebar - Content menyesuaikan lebar sidebar */
-@media (min-width: 1024px) {
-    .main { margin-left: 4rem; }
-    .main.lg\:ml-60 { margin-left: 15rem; }
-}
+        /* Responsive Sidebar - Content menyesuaikan lebar sidebar */
+        @media (min-width: 1024px) {
+            .main { margin-left: 4rem; }
+            .main.lg\:ml-60 { margin-left: 15rem; }
+        }
 
-/* Mobile: Sidebar sebagai overlay, content tidak bergeser */
-@media (max-width: 1023px) {
-    .main { margin-left: 0 !important; }
-}
+        /* Mobile: Sidebar sebagai overlay, content tidak bergeser */
+        @media (max-width: 1023px) {
+            .main { margin-left: 0 !important; }
+        }
 
-/* Toggle button selalu terlihat di atas sidebar */
-#toggleBtn {
-    position: relative;
-    z-index: 51 !important;
-}
+        /* Toggle button selalu terlihat di atas sidebar */
+        #toggleBtn {
+            position: relative;
+            z-index: 51 !important;
+        }
 
-/* SweetAlert Custom Colors */
-.swal2-confirm { background-color: #d9534f !important; }
-.swal2-cancel { background-color: #f59e0b !important; }
-
-/* Custom scrollbar untuk tabel di mobile */
-.table-scroll::-webkit-scrollbar {
-    height: 8px;
-}
-.table-scroll::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 10px;
-}
-.table-scroll::-webkit-scrollbar-thumb {
-    background: #888;
-    border-radius: 10px;
-}
-.table-scroll::-webkit-scrollbar-thumb:hover {
-    background: #555;
-}
-</style>
+        /* SweetAlert Custom Colors */
+        .swal2-confirm { background-color: #d9534f !important; }
+        .swal2-cancel { background-color: #f59e0b !important; }
+    </style>
 </head>
 <body class="bg-blue-100 min-h-screen">
 
@@ -127,7 +138,7 @@ body {
         
         <!-- Breadcrumb untuk mobile -->
         <div class="text-sm text-gray-600 hidden sm:block">
-            <span class="font-semibold">Data Ruangan</span>
+            <span class="font-semibold">Data Ruangan Multiguna</span>
         </div>
     </div>
 
@@ -173,12 +184,13 @@ body {
                             class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 text-2xl font-bold" 
                             id="searchClearBtn">&times;</button>
                 <?php endif; ?>
+                <input type="hidden" name="page" value="1">
             </form>
         </div>
 
         <!-- Table Container -->
         <div class="bg-white rounded-xl overflow-hidden shadow-md border border-gray-200">
-            <?php if (empty($ruangan)): ?>
+            <?php if (empty($ruangan_data)): ?>
                 <!-- Empty State -->
                 <div class="text-center p-8 sm:p-16">
                     <div class="text-5xl sm:text-6xl mb-3 sm:mb-4">📂</div>
@@ -214,19 +226,17 @@ body {
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200">
-                            <?php $no=1; foreach($ruangan as $r): ?>
+                            <?php $no=$offset+1; foreach($ruangan_data as $r): ?>
                             <tr class="hover:bg-gray-50 transition-colors">
                                 <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-700"><?= $no ?>.</td>
                                 <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900"><?= htmlspecialchars($r['nama']) ?></td>
                                 <td class="px-4 py-3 whitespace-nowrap text-sm">
                                     <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                        👥 <?= htmlspecialchars($r['kapasitas']) ?>
+                                     <?= htmlspecialchars($r['kapasitas']) ?>
                                     </span>
                                 </td>
                                 <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                                    <span class="inline-flex items-center">
-                                        📍 <?= htmlspecialchars($r['lokasi']) ?>
-                                    </span>
+                                    <?= htmlspecialchars($r['lokasi']) ?>
                                 </td>
                                 <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-green-600">
                                     Rp <?= number_format($r['tarif_internal']??0,0,',','.') ?>
@@ -258,7 +268,7 @@ body {
 
                 <!-- Mobile Card View -->
                 <div class="lg:hidden space-y-4 p-3">
-                    <?php $no=1; foreach($ruangan as $r): ?>
+                    <?php $no=$offset+1; foreach($ruangan_data as $r): ?>
                     <div class="bg-white border-2 border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
                         <div class="flex justify-between items-start mb-3">
                             <div class="flex-1">
@@ -268,11 +278,11 @@ body {
                         </div>
                         
                         <div class="space-y-2 mb-3">
-                            <div class="flex items-center text-sm">
+                            <div class="flex items-center text-sm gap-2">
                                 <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                     👥 <?= htmlspecialchars($r['kapasitas']) ?>
                                 </span>
-                                <span class="ml-3 text-gray-600">
+                                <span class="text-gray-600">
                                     📍 <?= htmlspecialchars($r['lokasi']) ?>
                                 </span>
                             </div>
@@ -308,6 +318,51 @@ body {
                 </div>
             <?php endif; ?>
         </div>
+
+        <!-- Pagination -->
+        <?php if ($total_pages > 1): ?>
+        <div class="flex flex-wrap justify-center gap-2 mt-6">
+            <?php 
+            $base_url = "search=".urlencode($search);
+            
+            // Tombol Sebelumnya
+            if ($page > 1): ?>
+                <a href="?page=<?= $page-1 ?>&<?= $base_url ?>" 
+                   class="px-3 sm:px-4 py-2 rounded-lg bg-gray-700 text-white hover:bg-gray-800 transition-colors text-sm">
+                    ‹ Sebelumnya
+                </a>
+            <?php else: ?>
+                <span class="px-3 sm:px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm">‹ Sebelumnya</span>
+            <?php endif; ?>
+
+            <?php for($i=max(1,$page-2); $i<=min($total_pages,$page+2); $i++): ?>
+                <?php if ($i==$page): ?>
+                    <span class="px-3 sm:px-4 py-2 rounded-lg bg-amber-500 text-gray-900 font-semibold text-sm"><?= $i ?></span>
+                <?php else: ?>
+                    <a href="?page=<?= $i ?>&<?= $base_url ?>" 
+                       class="px-3 sm:px-4 py-2 rounded-lg bg-gray-700 text-white hover:bg-gray-800 transition-colors text-sm">
+                        <?= $i ?>
+                    </a>
+                <?php endif; ?>
+            <?php endfor; ?>
+
+            <?php 
+            // Tombol Selanjutnya
+            if ($page<$total_pages): ?>
+                <a href="?page=<?= $page+1 ?>&<?= $base_url ?>" 
+                   class="px-3 sm:px-4 py-2 rounded-lg bg-gray-700 text-white hover:bg-gray-800 transition-colors text-sm">
+                    Selanjutnya ›
+                </a>
+            <?php else: ?>
+                <span class="px-3 sm:px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm">Selanjutnya ›</span>
+            <?php endif; ?>
+        </div>
+        
+        <div class="text-gray-500 text-xs sm:text-sm mt-3 text-center">
+            Menampilkan <?= count($ruangan_data) ?> dari <?= $total_records ?> total data
+            <?= !empty($search) ? '(hasil pencarian: "'.htmlspecialchars($search).'")' : '' ?>
+        </div>
+        <?php endif; ?>
     </div>
 </div>
 

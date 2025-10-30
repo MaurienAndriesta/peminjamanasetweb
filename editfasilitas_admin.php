@@ -148,6 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Edit Data Fasilitas - Admin Pengelola</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
@@ -319,9 +320,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-200">
                 <a href="datafasilitas_admin.php" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold px-6 py-3 rounded-lg shadow transition-colors"
-                   onclick="return confirm('Apakah Anda yakin ingin membatalkan perubahan data? Perubahan tidak akan disimpan.');">
-                    Batal
-                </a>
+   onclick="confirmCancel(event);">
+    Batal
+</a>
+
                 <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-semibold px-6 py-3 rounded-lg shadow transition-colors">
                     Simpan Perubahan
                 </button>
@@ -331,20 +333,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 </div>
 
 <script>
-// PENTING: Fungsi toggleSidebar() harus sama persis dengan yang ada di sidebar_admin.php
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     const main = document.getElementById('mainContent');
     const is_desktop = window.innerWidth >= 1024;
 
     if (is_desktop) {
-        // Desktop: Toggle width
         sidebar.classList.toggle('lg:w-60');
         sidebar.classList.toggle('lg:w-16');
         main.classList.toggle('lg:ml-60');
         main.classList.toggle('lg:ml-16');
     } else {
-        // Mobile: Toggle visibility
         sidebar.classList.toggle('translate-x-0');
         sidebar.classList.toggle('-translate-x-full');
     }
@@ -358,50 +357,75 @@ function toggleSidebar() {
     localStorage.setItem('sidebarStatus', is_expanded ? 'open' : 'collapsed');
 }
 
-// --- FUNGSI PERBAIKAN GAMBAR ---
+// === Pratinjau Gambar + Validasi SweetAlert ===
 function previewImage(event) {
     const file = event.target.files[0];
     const img = document.getElementById('previewImg');
     const placeholder = document.getElementById('uploadPlaceholder');
-    
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            img.src = e.target.result;
-            img.style.display = 'block';
-            placeholder.style.opacity = '0'; 
-        };
-        reader.readAsDataURL(file);
+    if (!file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+    const maxSize = 2 * 1024 * 1024; // 2MB
+
+    if (!allowedTypes.includes(file.type)) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Format Tidak Didukung',
+            text: 'Format gambar harus JPG, JPEG, atau PNG.',
+            confirmButtonColor: '#f59e0b'
+        });
+        event.target.value = '';
+        img.style.display = 'none';
+        placeholder.style.opacity = '1';
+        return;
     }
+
+    if (file.size > maxSize) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Ukuran File Terlalu Besar',
+            text: 'Ukuran maksimal gambar adalah 2MB.',
+            confirmButtonColor: '#f59e0b'
+        });
+        event.target.value = '';
+        img.style.display = 'none';
+        placeholder.style.opacity = '1';
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        img.src = e.target.result;
+        img.style.display = 'block';
+        placeholder.style.opacity = '0';
+    };
+    reader.readAsDataURL(file);
 }
 
-// Toggle tarif section logic
-function toggleTarifSection() {
-    const isBerbayar = document.getElementById('berbayar').checked;
-    const tarifSection = document.getElementById('tarifSection');
-    const tarifInputs = tarifSection.querySelectorAll('input[type="number"]');
-    
-    if (isBerbayar) {
-        tarifSection.style.display = 'block';
-        tarifSection.style.opacity = '1';
-        tarifInputs.forEach(input => {
-            input.disabled = false;
-        });
-    } else {
-        tarifSection.style.display = 'none';
-        tarifSection.style.opacity = '0.5';
-        tarifInputs.forEach(input => {
-            input.disabled = true; 
-        });
-    }
+// === SweetAlert Tombol Batal ===
+function confirmCancel(event) {
+    event.preventDefault();
+    Swal.fire({
+        title: 'Batalkan Perubahan?',
+        text: 'Perubahan yang sudah kamu buat tidak akan disimpan.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#f59e0b',
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: 'Ya, Batalkan',
+        cancelButtonText: 'Tidak'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            window.location.href = 'datafasilitas_admin.php';
+        }
+    });
 }
 
-// Form validation
+// === Validasi Form ===
 document.getElementById('editForm').addEventListener('submit', function(e) {
     const isBerbayar = document.getElementById('berbayar').checked;
     let isValid = true;
-    
-    // Reset borders
+
     this.querySelectorAll('input, textarea').forEach(input => input.style.borderColor = '');
 
     if (isBerbayar) {
@@ -410,40 +434,58 @@ document.getElementById('editForm').addEventListener('submit', function(e) {
         
         if (tarifInternal && (!tarifInternal.value || parseFloat(tarifInternal.value) <= 0)) {
             isValid = false;
-            tarifInternal.style.borderColor = '#ef4444'; // red-500
+            tarifInternal.style.borderColor = '#ef4444';
         }
         if (tarifEksternal && (!tarifEksternal.value || parseFloat(tarifEksternal.value) <= 0)) {
             isValid = false;
-            tarifEksternal.style.borderColor = '#ef4444'; // red-500
+            tarifEksternal.style.borderColor = '#ef4444';
         }
     }
-    
-    // Check all required fields (minimal check, validasi utama ada di PHP)
+
     this.querySelectorAll('[required]').forEach(input => {
         if (!input.value.trim()) {
             isValid = false;
-            input.style.borderColor = '#ef4444'; // red-500
+            input.style.borderColor = '#ef4444';
         }
     });
 
     if (!isValid) {
         e.preventDefault();
-        alert('Mohon lengkapi semua field yang diperlukan, terutama tarif jika "Berbayar" dipilih.');
+        Swal.fire({
+            icon: 'warning',
+            title: 'Form Belum Lengkap',
+            text: 'Mohon lengkapi semua field yang diperlukan, terutama tarif jika "Berbayar" dipilih.',
+            confirmButtonColor: '#f59e0b'
+        });
     }
 });
 
-// Event listeners and Initialize page
+// === Toggle Tarif ===
+function toggleTarifSection() {
+    const isBerbayar = document.getElementById('berbayar').checked;
+    const tarifSection = document.getElementById('tarifSection');
+    const tarifInputs = tarifSection.querySelectorAll('input[type="number"]');
+    
+    if (isBerbayar) {
+        tarifSection.style.display = 'block';
+        tarifSection.style.opacity = '1';
+        tarifInputs.forEach(input => input.disabled = false);
+    } else {
+        tarifSection.style.display = 'none';
+        tarifSection.style.opacity = '0.5';
+        tarifInputs.forEach(input => input.disabled = true);
+    }
+}
+
 document.getElementById('gratis').addEventListener('change', toggleTarifSection);
 document.getElementById('berbayar').addEventListener('change', toggleTarifSection);
 
+// === Inisialisasi ===
 document.addEventListener('DOMContentLoaded', function() {
-    // Jalankan pertama kali saat halaman dimuat
-    toggleTarifSection(); 
+    toggleTarifSection();
 
-    // Logika tampilan awal pratinjau gambar
     const img = document.getElementById('previewImg');
     const placeholder = document.getElementById('uploadPlaceholder');
-    
     if (img.src && img.src.includes('assets/images/') && img.src.length > 30) {
         img.style.display = 'block';
         placeholder.style.opacity = '0';
@@ -452,7 +494,6 @@ document.addEventListener('DOMContentLoaded', function() {
         placeholder.style.opacity = '1';
     }
 
-    // Logic untuk restore sidebar state
     const sidebar = document.getElementById('sidebar');
     const main = document.getElementById('mainContent');
     const status = localStorage.getItem('sidebarStatus');
