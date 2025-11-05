@@ -1,6 +1,6 @@
 <?php
 session_start();
-include 'koneksi.php'; // koneksi database
+include 'koneksi.php'; 
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = $_POST['email'] ?? '';
