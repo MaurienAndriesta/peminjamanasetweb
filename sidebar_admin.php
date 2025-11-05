@@ -1,7 +1,5 @@
 <?php
 // sidebar_admin.php
-// PENTING: Pastikan tidak ada karakter atau spasi di luar tag PHP di baris ini.
-
 $current_page = basename($_SERVER['PHP_SELF']);
 
 // Halaman terkait Data Sewa Ruangan
@@ -23,16 +21,6 @@ $is_dataruang_active = in_array($current_page, [
     'editlaboratorium_admin.php',
     'detaillaboratorium_admin.php'
 ]);
-
-// Halaman terkait Laporan
-$is_laporan_active = in_array($current_page, [
-    'laporan_penggunaan.php',
-    'laporan_keuangan.php'
-]);
-
-// Tentukan dropdown yang terbuka
-$is_dataruang_open = $is_dataruang_active;
-$is_laporan_open = $is_laporan_active;
 ?>
 
 <div
@@ -59,7 +47,7 @@ $is_laporan_open = $is_laporan_active;
         </li>
 
         <!-- Data Sewa Ruangan -->
-        <li class="dropdown <?= $is_dataruang_open ? 'open' : '' ?>">
+        <li class="dropdown <?= $is_dataruang_active ? 'open' : '' ?>">
             <a href="#"
                 class="flex items-center px-2 py-3 rounded-xl hover:bg-gray-700 cursor-pointer transition-colors
                 <?= $is_dataruang_active ? 'bg-amber-500 text-gray-900 font-semibold' : 'text-gray-200' ?>"
@@ -67,10 +55,10 @@ $is_laporan_open = $is_laporan_active;
                 <span class="flex items-center text-xl w-6 text-center">📝</span>
                 <span class="ml-3 text-sm sidebar-text hidden flex-grow">Data Sewa Ruangan</span>
                 <span class="arrow ml-auto transition-transform duration-300
-                    <?= $is_dataruang_open ? 'rotate-180' : 'rotate-0' ?> sidebar-text-arrow hidden">▼</span>
+                    <?= $is_dataruang_active ? 'rotate-180' : 'rotate-0' ?> sidebar-text-arrow hidden">▼</span>
             </a>
 
-            <ul class="submenu flex flex-col pl-5 ml-1 mt-1 py-1 bg-[#1a2330] rounded-lg <?= $is_dataruang_open ? '' : 'hidden' ?>">
+            <ul class="submenu flex flex-col pl-5 ml-1 mt-1 py-1 bg-[#1a2330] rounded-lg <?= $is_dataruang_active ? '' : 'hidden' ?>">
                 <li>
                     <a href="dataruangmultiguna_admin.php"
                         class="block px-3 py-2 text-sm rounded-lg hover:bg-gray-700
@@ -127,34 +115,14 @@ $is_laporan_open = $is_laporan_active;
             </a>
         </li>
 
-        <!-- Laporan -->
-        <li class="dropdown <?= $is_laporan_open ? 'open' : '' ?>">
-            <a href="#"
-                class="flex items-center px-2 py-3 rounded-xl hover:bg-gray-700 cursor-pointer transition-colors
-                <?= $is_laporan_active ? 'bg-amber-500 text-gray-900 font-semibold' : 'text-gray-200' ?>"
-                onclick="toggleDropdown(event)">
-                <span class="flex items-center text-xl w-6 text-center">📊</span>
-                <span class="ml-3 text-sm sidebar-text hidden flex-grow">Laporan</span>
-                <span class="arrow ml-auto transition-transform duration-300
-                    <?= $is_laporan_open ? 'rotate-180' : 'rotate-0' ?> sidebar-text-arrow hidden">▼</span>
+        <!-- Laporan (langsung ke Keuangan) -->
+        <li>
+            <a href="laporan_keuangan.php"
+                class="flex items-center px-2 py-3 rounded-xl hover:bg-gray-700 transition-colors
+                <?= ($current_page == 'laporan_keuangan.php') ? 'bg-amber-500 text-gray-900 font-semibold' : 'text-gray-200' ?>">
+                <span class="text-xl w-6 text-center">📊</span>
+                <span class="ml-3 text-sm sidebar-text hidden flex-grow">Laporan Keuangan</span>
             </a>
-
-            <ul class="submenu flex flex-col pl-5 ml-1 mt-1 py-1 bg-[#1a2330] rounded-lg <?= $is_laporan_open ? '' : 'hidden' ?>">
-                <li>
-                    <a href="laporan_penggunaan.php"
-                        class="block px-3 py-2 text-sm rounded-lg hover:bg-gray-700
-                        <?= ($current_page == 'laporan_penggunaan.php') ? 'bg-amber-600 font-semibold text-white' : 'text-gray-300' ?>">
-                        Penggunaan Ruangan
-                    </a>
-                </li>
-                <li>
-                    <a href="laporan_keuangan.php"
-                        class="block px-3 py-2 text-sm rounded-lg hover:bg-gray-700
-                        <?= ($current_page == 'laporan_keuangan.php') ? 'bg-amber-600 font-semibold text-white' : 'text-gray-300' ?>">
-                        Keuangan
-                    </a>
-                </li>
-            </ul>
         </li>
 
     </ul>
@@ -165,7 +133,7 @@ $is_laporan_open = $is_laporan_active;
    Fungsi Sidebar Admin
 ---------------------------------------------------------- */
 
-// Mengatur visibilitas teks dan panah
+// Fungsi update visibilitas teks dan panah
 function updateSidebarVisibility(is_expanded) {
     const texts = document.querySelectorAll('.sidebar-text');
     const arrows = document.querySelectorAll('.sidebar-text-arrow');
@@ -189,7 +157,7 @@ function updateSidebarVisibility(is_expanded) {
     }
 }
 
-// Toggle sidebar
+// Fungsi toggle sidebar
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     const main = document.getElementById('mainContent');
@@ -210,7 +178,7 @@ function toggleSidebar() {
     localStorage.setItem('sidebarStatus', is_expanded ? 'open' : 'collapsed');
 }
 
-// Toggle dropdown menu
+// Fungsi dropdown hanya untuk Data Ruangan
 function toggleDropdown(event) {
     event.preventDefault();
     const parent = event.currentTarget.parentElement;

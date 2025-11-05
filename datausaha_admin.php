@@ -38,7 +38,7 @@ if (isset($_GET['action']) && $_GET['action'] == 'delete' && isset($_GET['id']))
 }
 
 // --- PAGINATION & SEARCH LOGIC ---
-$limit = 10;
+$limit = 5;
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 $search = isset($_GET['search']) ? $_GET['search'] : '';
@@ -46,7 +46,7 @@ $search_query = '';
 $search_param = '';
 
 if (!empty($search)) {
-    $search_query = " AND (nama LIKE :search OR kapasitas LIKE :search OR lokasi LIKE :search)";
+    $search_query = " AND (nama LIKE :search OR kapasitas LIKE :search)";
     $search_param = '%' . $search . '%';
 }
 
@@ -63,7 +63,7 @@ try {
     $total_pages = ceil($total_records / $limit);
 
     // Ambil Data dengan Limit & Offset
-    $db->query("SELECT id, nama, kapasitas, lokasi, tarif_internal, tarif_eksternal, created_at 
+    $db->query("SELECT id, nama, kapasitas, tarif_internal, tarif_eksternal, created_at 
                 FROM usaha 
                 WHERE status = 'aktif'" . $search_query . " 
                 ORDER BY created_at DESC 
@@ -210,7 +210,6 @@ try {
                                 <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">No.</th>
                                 <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Nama Usaha</th>
                                 <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Kapasitas</th>
-                                <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Lokasi</th>
                                 <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Tarif Internal</th>
                                 <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Tarif Eksternal</th>
                                 <th class="px-4 py-3 text-center text-xs font-bold uppercase tracking-wider">Aksi</th>
@@ -227,9 +226,6 @@ try {
                                     </span>
                                 </td>
                                 <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                                    <span class="inline-flex items-center">
-                                        📍 <?= htmlspecialchars($u['lokasi']) ?>
-                                    </span>
                                 </td>
                                 <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-green-600">
                                     Rp <?= number_format($u['tarif_internal']??0,0,',','.') ?>
@@ -273,9 +269,6 @@ try {
                             <div class="flex items-center text-sm">
                                 <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                     👥 <?= htmlspecialchars($u['kapasitas']) ?>
-                                </span>
-                                <span class="ml-3 text-gray-600">
-                                    📍 <?= htmlspecialchars($u['lokasi']) ?>
                                 </span>
                             </div>
                             

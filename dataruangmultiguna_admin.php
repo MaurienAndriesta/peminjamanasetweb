@@ -46,7 +46,7 @@ $search_query = '';
 $search_param = '';
 
 if (!empty($search)) {
-    $search_query = " AND (nama LIKE :search OR kapasitas LIKE :search OR lokasi LIKE :search)";
+    $search_query = " AND (nama LIKE :search OR kapasitas LIKE :search)";
     $search_param = '%' . $search . '%';
 }
 
@@ -63,7 +63,7 @@ try {
     $total_pages = ceil($total_records / $limit);
 
     // Ambil Data dengan Limit & Offset
-    $db->query("SELECT id, nama, kapasitas, lokasi, tarif_internal, tarif_eksternal, created_at 
+    $db->query("SELECT id, nama, kapasitas, tarif_internal, tarif_eksternal, created_at 
                 FROM ruangan_multiguna 
                 WHERE status = 'aktif'" . $search_query . " 
                 ORDER BY created_at DESC 
@@ -219,7 +219,6 @@ try {
                                 <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">No.</th>
                                 <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Nama Ruangan</th>
                                 <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Kapasitas</th>
-                                <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Lokasi</th>
                                 <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Tarif Internal</th>
                                 <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Tarif Eksternal</th>
                                 <th class="px-4 py-3 text-center text-xs font-bold uppercase tracking-wider">Aksi</th>
@@ -234,9 +233,6 @@ try {
                                     <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                      <?= htmlspecialchars($r['kapasitas']) ?>
                                     </span>
-                                </td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                                    <?= htmlspecialchars($r['lokasi']) ?>
                                 </td>
                                 <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-green-600">
                                     Rp <?= number_format($r['tarif_internal']??0,0,',','.') ?>
@@ -281,9 +277,6 @@ try {
                             <div class="flex items-center text-sm gap-2">
                                 <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                     👥 <?= htmlspecialchars($r['kapasitas']) ?>
-                                </span>
-                                <span class="text-gray-600">
-                                    📍 <?= htmlspecialchars($r['lokasi']) ?>
                                 </span>
                             </div>
                             
