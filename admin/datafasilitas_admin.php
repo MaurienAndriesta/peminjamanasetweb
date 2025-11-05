@@ -1,9 +1,10 @@
 <?php
-// Include database configuration
-require_once 'config/database.php';
-
-// Initialize database connection
+require_once __DIR__ . '/../config/database.php';
 $db = new Database();
+
+if (!file_exists(__DIR__ . '/../config/database.php')) {
+    die('File database.php tidak ditemukan di: ' . __DIR__ . '/../config/database.php');
+}
 
 // Initialize messages
 $success_message = null;
