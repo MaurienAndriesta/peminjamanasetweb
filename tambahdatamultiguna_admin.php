@@ -104,6 +104,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tambah Data Ruangan - Admin Pengelola</title>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
@@ -321,22 +323,56 @@ function toggleSidebar() {
     }
 
     const is_expanded = sidebar.classList.contains('lg:w-60') || sidebar.classList.contains('translate-x-0');
-    
+
     if (typeof updateSidebarVisibility === 'function') {
         updateSidebarVisibility(is_expanded);
     }
-    
+
     localStorage.setItem('sidebarStatus', is_expanded ? 'open' : 'collapsed');
 }
 
 function previewImage(event) {
     const file = event.target.files[0];
+    const img = document.getElementById('previewImg');
+    const placeholder = document.getElementById('uploadPlaceholder');
+
     if (file) {
+        const maxSize = 2 * 1024 * 1024; // Maks 2MB
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+
+        // Validasi ukuran file
+        if (file.size > maxSize) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Ukuran File Terlalu Besar',
+                text: 'Ukuran gambar maksimal 2MB. Silakan pilih file yang lebih kecil.',
+                confirmButtonColor: '#f59e0b',
+                confirmButtonText: 'Oke'
+            });
+            event.target.value = '';
+            img.style.display = 'none';
+            placeholder.style.opacity = '1';
+            return;
+        }
+
+        // Validasi tipe file
+        if (!allowedTypes.includes(file.type)) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Format Tidak Didukung',
+                text: 'Format gambar harus JPG atau PNG.',
+                confirmButtonColor: '#f59e0b',
+                confirmButtonText: 'Oke'
+            });
+            event.target.value = '';
+            img.style.display = 'none';
+            placeholder.style.opacity = '1';
+            return;
+        }
+
+        // Jika valid, tampilkan preview
         const reader = new FileReader();
         reader.onload = function(e) {
-            const img = document.getElementById('previewImg');
-            const placeholder = document.getElementById('uploadPlaceholder');
-            
             img.src = e.target.result;
             img.style.display = 'block';
             placeholder.style.opacity = '0';
@@ -368,9 +404,20 @@ function toggleTarifSection() {
 }
 
 function resetForm() {
-    if (confirm('Apakah Anda yakin ingin membatalkan penambahan data? Perubahan tidak akan disimpan.')) {
-        window.location.href = 'dataruangmultiguna_admin.php'; 
-    }
+    Swal.fire({
+        title: 'Batalkan Penambahan Data?',
+        text: 'Perubahan yang sudah kamu buat tidak akan disimpan.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#f59e0b',
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: 'Ya, Batalkan',
+        cancelButtonText: 'Tidak'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            window.location.href = 'dataruangmultiguna_admin.php';
+        }
+    });
 }
 
 document.getElementById('tambahForm').addEventListener('submit', function(e) {

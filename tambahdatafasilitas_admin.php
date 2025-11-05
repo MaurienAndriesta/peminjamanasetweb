@@ -108,6 +108,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tambah Data Fasilitas - Admin Pengelola</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         body { 
@@ -332,56 +334,76 @@ function toggleSidebar() {
     localStorage.setItem('sidebarStatus', is_expanded ? 'open' : 'collapsed');
 }
 
+// === Pratinjau Gambar + Validasi SweetAlert ===
 function previewImage(event) {
     const file = event.target.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const img = document.getElementById('previewImg');
-            const placeholder = document.getElementById('uploadPlaceholder');
-            
-            img.src = e.target.result;
-            img.style.display = 'block';
-            placeholder.style.opacity = '0';
-        };
-        reader.readAsDataURL(file);
+    const img = document.getElementById('previewImg');
+    const placeholder = document.getElementById('uploadPlaceholder');
+    if (!file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+    const maxSize = 2 * 1024 * 1024; // 2MB
+
+    if (!allowedTypes.includes(file.type)) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Format Tidak Didukung',
+            text: 'Format gambar harus JPG, JPEG, atau PNG.',
+            confirmButtonColor: '#f59e0b'
+        });
+        event.target.value = '';
+        img.style.display = 'none';
+        placeholder.style.opacity = '1';
+        return;
     }
+
+    if (file.size > maxSize) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Ukuran File Terlalu Besar',
+            text: 'Ukuran maksimal gambar adalah 2MB.',
+            confirmButtonColor: '#f59e0b'
+        });
+        event.target.value = '';
+        img.style.display = 'none';
+        placeholder.style.opacity = '1';
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        img.src = e.target.result;
+        img.style.display = 'block';
+        placeholder.style.opacity = '0';
+    };
+    reader.readAsDataURL(file);
 }
 
-function toggleTarifSection() {
-    const isBerbayar = document.getElementById('berbayar').checked;
-    const tarifSection = document.getElementById('tarifSection');
-    const tarifInputs = tarifSection.querySelectorAll('input[type="number"]');
-    
-    if (isBerbayar) {
-        tarifSection.style.display = 'block';
-        tarifInputs.forEach(input => {
-            input.disabled = false;
-            input.required = true;
-            if (input.value === '0') input.value = '';
-        });
-    } else {
-        tarifSection.style.display = 'none';
-        tarifInputs.forEach(input => {
-            input.disabled = true;
-            input.required = false;
-            input.value = '0';
-        });
-    }
-}
-
+// === SweetAlert Tombol Batal ===
 function resetForm() {
-    if (confirm('Apakah Anda yakin ingin membatalkan penambahan data? Perubahan tidak akan disimpan.')) {
-        window.location.href = 'datafasilitas_admin.php'; 
-    }
+    Swal.fire({
+        title: 'Batalkan Penambahan Data?',
+        text: 'Perubahan yang sudah kamu buat tidak akan disimpan.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#f59e0b',
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: 'Ya, Batalkan',
+        cancelButtonText: 'Tidak'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            window.location.href = 'datafasilitas_admin.php';
+        }
+    });
 }
 
+// === Validasi Form dengan SweetAlert ===
 document.getElementById('tambahForm').addEventListener('submit', function(e) {
     const isBerbayar = document.getElementById('berbayar').checked;
     let isValid = true;
     
     this.querySelectorAll('input, textarea').forEach(input => input.style.borderColor = '');
-    
+
     this.querySelectorAll('[required]').forEach(input => {
         if (!input.value.trim()) {
             isValid = false;
@@ -405,13 +427,42 @@ document.getElementById('tambahForm').addEventListener('submit', function(e) {
     
     if (!isValid) {
         e.preventDefault();
-        alert('Mohon lengkapi semua field yang diperlukan.');
+        Swal.fire({
+            icon: 'warning',
+            title: 'Form Belum Lengkap',
+            text: 'Mohon lengkapi semua field yang diperlukan sebelum menyimpan.',
+            confirmButtonColor: '#f59e0b'
+        });
     }
 });
+
+// === Tipe Tarif Toggle ===
+function toggleTarifSection() {
+    const isBerbayar = document.getElementById('berbayar').checked;
+    const tarifSection = document.getElementById('tarifSection');
+    const tarifInputs = tarifSection.querySelectorAll('input[type="number"]');
+    
+    if (isBerbayar) {
+        tarifSection.style.display = 'block';
+        tarifInputs.forEach(input => {
+            input.disabled = false;
+            input.required = true;
+            if (input.value === '0') input.value = '';
+        });
+    } else {
+        tarifSection.style.display = 'none';
+        tarifInputs.forEach(input => {
+            input.disabled = true;
+            input.required = false;
+            input.value = '0';
+        });
+    }
+}
 
 document.getElementById('gratis').addEventListener('change', toggleTarifSection);
 document.getElementById('berbayar').addEventListener('change', toggleTarifSection);
 
+// === Inisialisasi ===
 document.addEventListener('DOMContentLoaded', function() {
     const sidebar = document.getElementById('sidebar');
     const main = document.getElementById('mainContent');
@@ -443,9 +494,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    if (overlay) {
-        overlay.addEventListener('click', toggleSidebar);
-    }
+    if (overlay) overlay.addEventListener('click', toggleSidebar);
 
     toggleTarifSection();
 });

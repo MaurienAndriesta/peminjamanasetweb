@@ -47,7 +47,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $satuan_peralatan = $_POST['satuan_peralatan'] ?? '';
 
     // Validation
-    $errors = [];
     if (empty($nama)) $errors[] = "Nama laboratorium harus diisi";
     if (empty($kapasitas)) $errors[] = "Kapasitas harus diisi";
     if (empty($lokasi)) $errors[] = "Lokasi harus diisi";
@@ -150,6 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Edit Data Laboratorium - Admin Pengelola</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
@@ -164,6 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             overflow: hidden;
             transition: all .2s;
         }
+        /* PENTING: Input file harus selalu visible dan di atas elemen lain */
         .image-upload-area input[type="file"] {
             position: absolute;
             width: 100%;
@@ -216,7 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <button class="bg-amber-500 hover:bg-amber-600 text-gray-900 p-2 rounded-lg transition-colors" onclick="toggleSidebar()">☰</button>
     </div>
 
-    <?php if (isset($error_message)): ?>
+    <?php if ($error_message): ?>
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 shadow-md" role="alert">
             ❌ <?= $error_message ?>
         </div>
@@ -340,7 +341,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-200">
                 <a href="datalaboratorium_admin.php" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold px-6 py-3 rounded-lg shadow transition-colors"
-                   onclick="return confirm('Apakah Anda yakin ingin membatalkan perubahan data? Perubahan tidak akan disimpan.');">
+                   onclick="confirmCancel(event);">
                     Batal
                 </a>
                 <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-semibold px-6 py-3 rounded-lg shadow transition-colors">
@@ -358,13 +359,11 @@ function toggleSidebar() {
     const is_desktop = window.innerWidth >= 1024;
 
     if (is_desktop) {
-        // Desktop: Toggle width
         sidebar.classList.toggle('lg:w-60');
         sidebar.classList.toggle('lg:w-16');
         main.classList.toggle('lg:ml-60');
         main.classList.toggle('lg:ml-16');
     } else {
-        // Mobile: Toggle visibility
         sidebar.classList.toggle('translate-x-0');
         sidebar.classList.toggle('-translate-x-full');
     }
@@ -378,37 +377,84 @@ function toggleSidebar() {
     localStorage.setItem('sidebarStatus', is_expanded ? 'open' : 'collapsed');
 }
 
-// --- FUNGSI PRATINJAU GAMBAR ---
+// === Pratinjau Gambar + Validasi SweetAlert ===
 function previewImage(event) {
     const file = event.target.files[0];
     const img = document.getElementById('previewImg');
     const placeholder = document.getElementById('uploadPlaceholder');
-    
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            img.src = e.target.result;
-            img.style.display = 'block';
-            placeholder.style.opacity = '0'; 
-        };
-        reader.readAsDataURL(file);
+    if (!file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+    const maxSize = 2 * 1024 * 1024; // 2MB
+
+    if (!allowedTypes.includes(file.type)) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Format Tidak Didukung',
+            text: 'Format gambar harus JPG, JPEG, atau PNG.',
+            confirmButtonColor: '#f59e0b'
+        });
+        event.target.value = '';
+        img.style.display = 'none';
+        placeholder.style.opacity = '1';
+        return;
     }
+
+    if (file.size > maxSize) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Ukuran File Terlalu Besar',
+            text: 'Ukuran maksimal gambar adalah 2MB.',
+            confirmButtonColor: '#f59e0b'
+        });
+        event.target.value = '';
+        img.style.display = 'none';
+        placeholder.style.opacity = '1';
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        img.src = e.target.result;
+        img.style.display = 'block';
+        placeholder.style.opacity = '0';
+    };
+    reader.readAsDataURL(file);
 }
 
-// Form validation
+// === SweetAlert Tombol Batal ===
+function confirmCancel(event) {
+    event.preventDefault();
+    Swal.fire({
+        title: 'Batalkan Perubahan?',
+        text: 'Perubahan yang sudah kamu buat tidak akan disimpan.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#f59e0b',
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: 'Ya, Batalkan',
+        cancelButtonText: 'Tidak'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            window.location.href = 'datalaboratorium_admin.php';
+        }
+    });
+}
+
+// === Validasi Form ===
 document.getElementById('editForm').addEventListener('submit', function(e) {
-    // Reset borders
+    let isValid = true;
+
     this.querySelectorAll('input, select, textarea').forEach(input => input.style.borderColor = '');
-    
+
     // Field yang harus diisi
     const requiredFields = ['nama', 'kapasitas', 'lokasi', 'fakultas', 'keterangan', 'tarif_laboratorium', 'tarif_peralatan', 'satuan_laboratorium', 'satuan_peralatan'];
-    let isValid = true;
 
     requiredFields.forEach(field => {
         const input = document.getElementById(field);
         if (input && !input.value.trim()) {
             isValid = false;
-            input.style.borderColor = '#ef4444'; // red-500
+            input.style.borderColor = '#ef4444';
         }
     });
 
@@ -427,12 +473,17 @@ document.getElementById('editForm').addEventListener('submit', function(e) {
     
     if (!isValid) {
         e.preventDefault();
-        alert('Mohon lengkapi semua field yang diperlukan dan pastikan tarif lebih dari 0!');
+        Swal.fire({
+            icon: 'warning',
+            title: 'Form Belum Lengkap',
+            text: 'Mohon lengkapi semua field yang diperlukan dan pastikan tarif lebih dari 0.',
+            confirmButtonColor: '#f59e0b'
+        });
     }
 });
 
+// === Inisialisasi ===
 document.addEventListener('DOMContentLoaded', function() {
-    // Logika tampilan awal pratinjau gambar
     const img = document.getElementById('previewImg');
     const placeholder = document.getElementById('uploadPlaceholder');
     
@@ -444,7 +495,6 @@ document.addEventListener('DOMContentLoaded', function() {
         placeholder.style.opacity = '1';
     }
 
-    // Logic untuk restore sidebar state
     const sidebar = document.getElementById('sidebar');
     const main = document.getElementById('mainContent');
     const status = localStorage.getItem('sidebarStatus');

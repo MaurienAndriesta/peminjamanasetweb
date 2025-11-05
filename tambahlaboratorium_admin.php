@@ -130,6 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tambah Data Laboratorium - Admin Pengelola</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         /* CSS khusus untuk integrasi dan font */
@@ -328,13 +329,11 @@ function toggleSidebar() {
     const is_desktop = window.innerWidth >= 1024;
 
     if (is_desktop) {
-        // Desktop: Toggle width
         sidebar.classList.toggle('lg:w-60');
         sidebar.classList.toggle('lg:w-16');
         main.classList.toggle('lg:ml-60');
         main.classList.toggle('lg:ml-16');
     } else {
-        // Mobile: Toggle visibility
         sidebar.classList.toggle('translate-x-0');
         sidebar.classList.toggle('-translate-x-full');
     }
@@ -348,18 +347,53 @@ function toggleSidebar() {
     localStorage.setItem('sidebarStatus', is_expanded ? 'open' : 'collapsed');
 }
 
-// Image preview
+// 🔸 Preview gambar
 function previewImage(event) {
     const file = event.target.files[0];
+    const img = document.getElementById('previewImg');
+    const placeholder = document.getElementById('uploadPlaceholder');
+
     if (file) {
+        const maxSize = 2 * 1024 * 1024; // 2MB
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+
+        // Cek ukuran file
+        if (file.size > maxSize) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Ukuran Terlalu Besar!',
+                text: 'Ukuran gambar maksimal 2MB.',
+                confirmButtonColor: '#f59e0b'
+            });
+            event.target.value = ''; // reset input
+            img.src = ''; // hapus preview
+            img.style.display = 'none';
+            placeholder.classList.remove('opacity-0');
+            placeholder.classList.add('opacity-100');
+            return;
+        }
+
+        // Cek tipe file
+        if (!allowedTypes.includes(file.type)) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Format Tidak Didukung!',
+                text: 'Format gambar harus JPG, JPEG, atau PNG.',
+                confirmButtonColor: '#f59e0b'
+            });
+            event.target.value = ''; // reset input
+            img.src = ''; // hapus preview
+            img.style.display = 'none';
+            placeholder.classList.remove('opacity-0');
+            placeholder.classList.add('opacity-100');
+            return;
+        }
+
+        // Kalau lolos validasi, tampilkan preview seperti biasa
         const reader = new FileReader();
         reader.onload = function(e) {
-            const img = document.getElementById('previewImg');
-            const placeholder = document.getElementById('uploadPlaceholder');
-            
             img.src = e.target.result;
             img.style.display = 'block';
-            
             placeholder.classList.add('opacity-0');
             placeholder.classList.remove('opacity-100');
         };
@@ -367,57 +401,109 @@ function previewImage(event) {
     }
 }
 
-// Reset form dan redirect ke halaman data laboratorium
+// 🔸 SweetAlert konfirmasi sebelum batal
 function resetForm() {
-    if (confirm('Apakah Anda yakin ingin membatalkan penambahan data? Perubahan tidak akan disimpan.')) {
-        window.location.href = 'datalaboratorium_admin.php'; 
-    }
+    Swal.fire({
+        title: 'Batalkan Penambahan Data?',
+        text: 'Data yang belum disimpan akan hilang.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#f59e0b',
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: 'Ya, Batalkan',
+        cancelButtonText: 'Tidak'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            window.location.href = 'datalaboratorium_admin.php';
+        }
+    });
 }
 
-// Form validation (Frontend check)
+// 🔸 Validasi form + ukuran gambar maksimal 2MB
 document.getElementById('tambahForm').addEventListener('submit', function(e) {
     let isValid = true;
-    
-    // Reset borders
+
+    // Cegah submit jika file > 2MB
+    const fileInput = document.getElementById('fileInput');
+    const file = fileInput.files[0];
+    if (file && file.size > 2097152) {
+        e.preventDefault();
+        Swal.fire({
+            icon: 'error',
+            title: 'Ukuran File Terlalu Besar',
+            text: 'Maksimal ukuran gambar adalah 2 MB.',
+            confirmButtonColor: '#f59e0b'
+        });
+        fileInput.value = '';
+        document.getElementById('previewImg').style.display = 'none';
+        document.getElementById('uploadPlaceholder').classList.remove('opacity-0');
+        document.getElementById('uploadPlaceholder').classList.add('opacity-100');
+        return;
+    }
+
+    // Reset border warna
     this.querySelectorAll('input, select, textarea').forEach(input => input.style.borderColor = '');
-    
-    // Field yang harus diisi
-    const requiredFields = ['nama', 'kapasitas', 'lokasi', 'fakultas', 'keterangan', 'tarif_laboratorium', 'tarif_peralatan', 'satuan_laboratorium', 'satuan_peralatan'];
+
+    const requiredFields = [
+        'nama', 'kapasitas', 'lokasi', 'fakultas',
+        'keterangan', 'tarif_laboratorium', 'tarif_peralatan',
+        'satuan_laboratorium', 'satuan_peralatan'
+    ];
 
     requiredFields.forEach(field => {
         const input = document.getElementById(field);
         if (input && !input.value.trim()) {
             isValid = false;
-            input.style.borderColor = '#ef4444'; // red-500
+            input.style.borderColor = '#ef4444';
         }
     });
-    
-    // Cek tarif harus lebih dari 0
+
     const tarifLab = document.getElementById('tarif_laboratorium');
     const tarifAlat = document.getElementById('tarif_peralatan');
 
     if (tarifLab && parseFloat(tarifLab.value) <= 0) {
         isValid = false;
-        tarifLab.style.borderColor = '#ef4444'; 
+        tarifLab.style.borderColor = '#ef4444';
     }
-     if (tarifAlat && parseFloat(tarifAlat.value) <= 0) {
+    if (tarifAlat && parseFloat(tarifAlat.value) <= 0) {
         isValid = false;
-        tarifAlat.style.borderColor = '#ef4444'; 
+        tarifAlat.style.borderColor = '#ef4444';
     }
-
 
     if (!isValid) {
         e.preventDefault();
-        alert('Mohon lengkapi semua field yang diperlukan dan pastikan tarif lebih dari 0!');
+        Swal.fire({
+            icon: 'error',
+            title: 'Form Tidak Lengkap',
+            text: 'Mohon lengkapi semua field dan pastikan tarif lebih dari 0!',
+            confirmButtonColor: '#f59e0b'
+        });
     }
 });
 
+// 🔸 Validasi otomatis saat upload gambar (maks 2MB)
+document.getElementById('fileInput').addEventListener('change', function() {
+    const file = this.files[0];
+    if (file && file.size > 2097152) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Ukuran File Terlalu Besar',
+            text: 'Maksimal ukuran gambar adalah 2 MB.',
+            confirmButtonColor: '#f59e0b'
+        });
+        this.value = ''; 
+        document.getElementById('previewImg').style.display = 'none';
+        document.getElementById('uploadPlaceholder').classList.remove('opacity-0');
+        document.getElementById('uploadPlaceholder').classList.add('opacity-100');
+    }
+});
+
+// 🔸 Restore sidebar state
 document.addEventListener('DOMContentLoaded', function() {
-    // Logic untuk restore sidebar state
     const sidebar = document.getElementById('sidebar');
     const main = document.getElementById('mainContent');
     const status = localStorage.getItem('sidebarStatus');
-    
+
     if (status === 'open') {
         main.classList.add('ml-60');
         main.classList.remove('ml-16');

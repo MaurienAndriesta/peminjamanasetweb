@@ -239,7 +239,7 @@ try {
                                 </td>
                                 <td class="px-4 py-3 whitespace-nowrap text-sm">
                                     <div class="flex gap-2 justify-center">
-                                        <a href="editdatausaha_admin.php?id=<?= $u['id'] ?>" 
+                                        <a href="editusaha_admin.php?id=<?= $u['id'] ?>" 
                                             class="inline-flex items-center px-3 py-1.5 text-xs font-bold rounded-lg bg-green-500 hover:bg-green-600 text-white transition-all shadow-sm">
                                             ✏️ Edit
                                         </a>
@@ -292,7 +292,7 @@ try {
                         </div>
                         
                         <div class="flex gap-2">
-                            <a href="editdatausaha_admin.php?id=<?= $u['id'] ?>" 
+                            <a href="editusaha_admin.php?id=<?= $u['id'] ?>" 
                                class="flex-1 text-center px-3 py-2 text-xs font-bold rounded-lg bg-green-500 hover:bg-green-600 text-white transition-all">
                                 ✏️ Edit
                             </a>

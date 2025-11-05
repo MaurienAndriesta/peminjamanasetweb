@@ -108,6 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tambah Data Usaha - Admin Pengelola</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         /* CSS khusus untuk integrasi dan font */
@@ -287,38 +288,64 @@ function toggleSidebar() {
     const is_desktop = window.innerWidth >= 1024;
 
     if (is_desktop) {
-        // Desktop: Toggle width
         sidebar.classList.toggle('lg:w-60');
         sidebar.classList.toggle('lg:w-16');
         main.classList.toggle('lg:ml-60');
         main.classList.toggle('lg:ml-16');
     } else {
-        // Mobile: Toggle visibility
         sidebar.classList.toggle('translate-x-0');
         sidebar.classList.toggle('-translate-x-full');
     }
 
     const is_expanded = sidebar.classList.contains('lg:w-60') || sidebar.classList.contains('translate-x-0');
-    
     if (typeof updateSidebarVisibility === 'function') {
         updateSidebarVisibility(is_expanded);
     }
-    
     localStorage.setItem('sidebarStatus', is_expanded ? 'open' : 'collapsed');
 }
 
-// Image preview
+// ✅ Image preview dengan SweetAlert
 function previewImage(event) {
     const file = event.target.files[0];
+    const img = document.getElementById('previewImg');
+    const placeholder = document.getElementById('uploadPlaceholder');
+
     if (file) {
+        const maxSize = 2 * 1024 * 1024; // 2MB
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+
+        if (!allowedTypes.includes(file.type)) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Format Tidak Didukung',
+                text: 'Format gambar harus JPG, JPEG, atau PNG.',
+                confirmButtonColor: '#f59e0b'
+            });
+            event.target.value = '';
+            img.style.display = 'none';
+            placeholder.classList.remove('opacity-0');
+            placeholder.classList.add('opacity-100');
+            return;
+        }
+
+        if (file.size > maxSize) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Ukuran File Terlalu Besar',
+                text: 'Ukuran maksimal gambar adalah 2MB.',
+                confirmButtonColor: '#f59e0b'
+            });
+            event.target.value = '';
+            img.style.display = 'none';
+            placeholder.classList.remove('opacity-0');
+            placeholder.classList.add('opacity-100');
+            return;
+        }
+
         const reader = new FileReader();
         reader.onload = function(e) {
-            const img = document.getElementById('previewImg');
-            const placeholder = document.getElementById('uploadPlaceholder');
-            
             img.src = e.target.result;
             img.style.display = 'block';
-            
             placeholder.classList.add('opacity-0');
             placeholder.classList.remove('opacity-100');
         };
@@ -326,7 +353,7 @@ function previewImage(event) {
     }
 }
 
-// Toggle tarif section based on tipe tarif
+// ✅ Toggle tarif section
 function toggleTarifSection() {
     const isBerbayar = document.getElementById('berbayar').checked;
     const tarifSection = document.getElementById('tarifSection');
@@ -349,26 +376,35 @@ function toggleTarifSection() {
     }
 }
 
-// Reset form dan redirect ke halaman data ruangan 
+// ✅ Reset form pakai SweetAlert konfirmasi
 function resetForm() {
-    if (confirm('Apakah Anda yakin ingin membatalkan penambahan data? Perubahan tidak akan disimpan.')) {
-        window.location.href = 'datausaha_admin.php'; 
-    }
+    Swal.fire({
+        title: 'Batalkan Penambahan Data?',
+        text: 'Perubahan tidak akan disimpan.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#f59e0b',
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: 'Ya, Batalkan',
+        cancelButtonText: 'Tidak'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            window.location.href = 'datausaha_admin.php';
+        }
+    });
 }
 
-// Form validation (Frontend check)
+// ✅ Validasi form pakai SweetAlert
 document.getElementById('tambahForm').addEventListener('submit', function(e) {
     const isBerbayar = document.getElementById('berbayar').checked;
     let isValid = true;
-    
-    // Reset borders
+
     this.querySelectorAll('input, textarea').forEach(input => input.style.borderColor = '');
-    
-    // Check all required fields (minimal check)
+
     this.querySelectorAll('[required]').forEach(input => {
         if (!input.value.trim()) {
             isValid = false;
-            input.style.borderColor = '#ef4444'; // red-500
+            input.style.borderColor = '#ef4444';
         }
     });
 
@@ -378,28 +414,31 @@ document.getElementById('tambahForm').addEventListener('submit', function(e) {
         
         if (tarifInternal && (!tarifInternal.value || parseFloat(tarifInternal.value) <= 0)) {
             isValid = false;
-            tarifInternal.style.borderColor = '#ef4444'; // red-500
+            tarifInternal.style.borderColor = '#ef4444';
         }
         if (tarifEksternal && (!tarifEksternal.value || parseFloat(tarifEksternal.value) <= 0)) {
             isValid = false;
-            tarifEksternal.style.borderColor = '#ef4444'; // red-500
+            tarifEksternal.style.borderColor = '#ef4444';
         }
     }
-    
+
     if (!isValid) {
         e.preventDefault();
-        alert('Mohon lengkapi semua field yang diperlukan, terutama tarif jika "Berbayar" dipilih.');
+        Swal.fire({
+            icon: 'warning',
+            title: 'Form Belum Lengkap',
+            text: 'Mohon lengkapi semua field yang diperlukan, terutama tarif jika "Berbayar" dipilih.',
+            confirmButtonColor: '#f59e0b'
+        });
     }
 });
 
-// Event listeners and Initialize page
+// ✅ Event listeners dan inisialisasi
 document.getElementById('gratis').addEventListener('change', toggleTarifSection);
 document.getElementById('berbayar').addEventListener('change', toggleTarifSection);
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Set default values dan initialize tarif section
     const initialTipeTarif = document.querySelector('input[name="tipe_tarif"]:checked').value;
-    
     if (initialTipeTarif === 'gratis') {
         document.getElementById('gratis').checked = true;
     } else {
@@ -408,7 +447,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     toggleTarifSection();
     
-    // Logic untuk restore sidebar state
     const sidebar = document.getElementById('sidebar');
     const main = document.getElementById('mainContent');
     const status = localStorage.getItem('sidebarStatus');
@@ -422,6 +460,5 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
-
 </body>
 </html>
