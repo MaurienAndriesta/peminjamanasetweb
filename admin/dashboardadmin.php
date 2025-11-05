@@ -1,7 +1,7 @@
 <?php
 // ... (Bagian PHP tetap sama) ...
 session_start();
-require_once 'config/database.php';
+require_once 'config/koneksi.php';
 $db = new Database();
 
 // ====== Simulasi nama admin ======
