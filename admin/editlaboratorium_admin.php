@@ -1,148 +1,113 @@
 <?php
-// Include database configuration
-require_once 'config/database.php';
+require_once '../koneksi.php';
+$db = $koneksi;
 
-// Initialize database connection
-$db = new Database();
-
-// Get laboratorium ID from URL parameter
 $laboratorium_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-
 if ($laboratorium_id <= 0) {
-    header('Location: datalaboratorium_admin.php');
+    header("Location: datalaboratorium_admin.php");
     exit;
 }
 
-// Inisialisasi variabel untuk form data dan pesan
-$laboratorium_data = [];
-$errors = [];
-$error_message = null;
+/* ==========================================
+   AMBIL DATA DARI 4 TABEL MENGGUNAKAN UNION
+   ========================================== */
 
-// --- 1. Ambil data lama sebelum POST (untuk pre-fill atau fallback) ---
-$db->query("SELECT * FROM laboratorium WHERE id = :id AND status = 'aktif'");
-$db->bind(':id', $laboratorium_id);
-try {
-    $fetched_data = $db->single();
-    if (!$fetched_data) {
-        header('Location: datalaboratorium_admin.php');
-        exit;
-    }
-    $laboratorium_data = $fetched_data;
-} catch (Exception $e) {
-    $error_message = "Terjadi kesalahan saat mengambil data: " . $e->getMessage();
+$sql = "
+    SELECT *, 'labftik' AS table_name 
+    FROM labftik WHERE id = $laboratorium_id
+
+    UNION ALL
+
+    SELECT *, 'labften' AS table_name 
+    FROM labften WHERE id = $laboratorium_id
+
+    UNION ALL
+
+    SELECT *, 'labfket' AS table_name 
+    FROM labfket WHERE id = $laboratorium_id
+
+    UNION ALL
+
+    SELECT *, 'labftbe' AS table_name 
+    FROM labftbe WHERE id = $laboratorium_id
+";
+
+$q = mysqli_query($koneksi, $sql);
+
+if (!$q || mysqli_num_rows($q) == 0) {
+    header("Location: datalaboratorium_admin.php");
+    exit;
 }
 
+$laboratorium_data = mysqli_fetch_assoc($q);
+$source_table = $laboratorium_data['table_name'];
+$id_column = "id"; // PK universal
 
-// --- 2. Processing form submission ---
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $nama = trim($_POST['nama'] ?? '');
-    $kapasitas = trim($_POST['kapasitas'] ?? '');
-    $lokasi = trim($_POST['lokasi'] ?? '');
-    $fakultas = $_POST['fakultas'] ?? '';
-    $status = $_POST['status'] ?? 'aktif';
-    $keterangan = trim($_POST['keterangan'] ?? '');
-    $tarif_laboratorium = trim($_POST['tarif_laboratorium'] ?? '');
-    $tarif_peralatan = trim($_POST['tarif_peralatan'] ?? '');
-    $satuan_laboratorium = $_POST['satuan_laboratorium'] ?? '';
-    $satuan_peralatan = $_POST['satuan_peralatan'] ?? '';
 
-    // Validation
-    if (empty($nama)) $errors[] = "Nama laboratorium harus diisi";
-    if (empty($kapasitas)) $errors[] = "Kapasitas harus diisi";
-    if (empty($lokasi)) $errors[] = "Lokasi harus diisi";
-    if (empty($fakultas)) $errors[] = "Fakultas harus dipilih";
-    if (empty($keterangan)) $errors[] = "Keterangan harus diisi";
-    if ((float)$tarif_laboratorium <= 0) $errors[] = "Tarif sewa laboratorium harus lebih dari 0";
-    if ((float)$tarif_peralatan <= 0) $errors[] = "Tarif sewa peralatan harus lebih dari 0";
-    if (empty($satuan_laboratorium)) $errors[] = "Satuan tarif laboratorium harus dipilih";
-    if (empty($satuan_peralatan)) $errors[] = "Satuan tarif peralatan harus dipilih";
 
-    // --- Handle image upload (Perbaikan Gambar) ---
-    $gambar_name = $laboratorium_data['gambar']; // Default: pertahankan gambar lama
-    $upload_dir = 'assets/images/';
-    
-    if (isset($_FILES['gambar']) && $_FILES['gambar']['error'] == 0) {
-        $allowed_types = ['image/jpeg', 'image/png', 'image/jpg'];
-        $max_size = 2 * 1024 * 1024; // 2MB
-        
-        if (!in_array($_FILES['gambar']['type'], $allowed_types)) {
-            $errors[] = "Format gambar harus JPG, JPEG, atau PNG";
-        } elseif ($_FILES['gambar']['size'] > $max_size) {
-            $errors[] = "Ukuran gambar maksimal 2MB";
-        } else {
-            // Proses upload gambar baru
-            if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0755, true);
-            }
-            $file_ext = pathinfo($_FILES['gambar']['name'], PATHINFO_EXTENSION);
-            $gambar_name_new = 'laboratorium_' . $laboratorium_id . '_' . time() . '.' . $file_ext;
-            $upload_path = $upload_dir . $gambar_name_new;
-            
-            if (move_uploaded_file($_FILES['gambar']['tmp_name'], $upload_path)) {
-                // Hapus gambar lama jika ada dan berhasil upload gambar baru
-                if (!empty($laboratorium_data['gambar']) && file_exists($upload_dir . $laboratorium_data['gambar'])) {
-                     unlink($upload_dir . $laboratorium_data['gambar']);
+/* ==========================================
+   UPDATE DATA
+   ========================================== */
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    $nama = mysqli_real_escape_string($koneksi, $_POST['nama']);
+    $kapasitas = mysqli_real_escape_string($koneksi, $_POST['kapasitas']);
+    $lokasi = mysqli_real_escape_string($koneksi, $_POST['lokasi']);
+    $status = mysqli_real_escape_string($koneksi, $_POST['status']);
+    $tarif_laboratorium = mysqli_real_escape_string($koneksi, $_POST['tarif_sewa_laboratorium']);
+    $tarif_peralatan = mysqli_real_escape_string($koneksi, $_POST['tarif_sewa_peralatan']);
+
+    $gambar_name = $laboratorium_data['foto']; // nama kolom yang benar
+
+    // Upload gambar baru
+    if (!empty($_FILES['foto']['name']) && $_FILES['foto']['error'] === 0) {
+
+        $allowed = ['jpg','jpeg','png'];
+        $ext = strtolower(pathinfo($_FILES['foto']['name'], PATHINFO_EXTENSION));
+
+        if (in_array($ext, $allowed)) {
+
+            $upload_dir = "assets/images/";
+            $gambar_new = "lab_" . $laboratorium_id . "_" . time() . "." . $ext;
+
+            if (move_uploaded_file($_FILES['foto']['tmp_name'], $upload_dir . $gambar_new)) {
+
+                if (!empty($gambar_name) && file_exists($upload_dir . $gambar_name)) {
+                    unlink($upload_dir . $gambar_name);
                 }
-                $gambar_name = $gambar_name_new; // Set nama gambar baru
-            } else {
-                $errors[] = "Gagal mengupload gambar baru";
+
+                $gambar_name = $gambar_new;
             }
         }
     }
 
-    // Jika ada error, tampilkan error dan isi form dengan data POST yang gagal
-    if (!empty($errors)) {
-        $error_message = implode("<br>", $errors);
-        // Fallback data form yang sudah diisi
-        $laboratorium_data = array_merge($laboratorium_data, [
-            'nama' => $nama, 'kapasitas' => $kapasitas, 'lokasi' => $lokasi, 'fakultas' => $fakultas, 
-            'keterangan' => $keterangan, 'status' => $status,
-            'tarif_laboratorium' => $tarif_laboratorium, 'tarif_peralatan' => $tarif_peralatan,
-            'satuan_laboratorium' => $satuan_laboratorium, 'satuan_peralatan' => $satuan_peralatan,
-            'gambar' => $gambar_name 
-        ]);
+    // UPDATE clean & sesuai tabel kamu
+    $update_sql = "
+        UPDATE $source_table SET
+            nama = '$nama',
+            kapasitas = '$kapasitas',
+            lokasi = '$lokasi',
+            status = '$status',
+            tarif_sewa_laboratorium = '$tarif_laboratorium',
+            tarif_sewa_peralatan = '$tarif_peralatan',
+            foto = '$gambar_name',
+            updated_at = NOW()
+        WHERE $id_column = $laboratorium_id
+    ";
+
+    if (mysqli_query($koneksi, $update_sql)) {
+        header("Location: datalaboratorium_admin.php?status=success_edit");
+        exit;
     } else {
-        try {
-            // Prepare update query
-            $update_fields = "nama = :nama, kapasitas = :kapasitas, lokasi = :lokasi, 
-                              fakultas = :fakultas, keterangan = :keterangan, 
-                              tarif_laboratorium = :tarif_laboratorium, satuan_laboratorium = :satuan_laboratorium,
-                              tarif_peralatan = :tarif_peralatan, satuan_peralatan = :satuan_peralatan,
-                              status = :status, updated_at = NOW()";
-
-            if (!empty($gambar_name)) {
-                $update_fields .= ", gambar = :gambar";
-            }
-
-            $db->query("UPDATE laboratorium SET $update_fields WHERE id = :id");
-            $db->bind(':nama', $nama);
-            $db->bind(':kapasitas', $kapasitas);
-            $db->bind(':lokasi', $lokasi);
-            $db->bind(':fakultas', $fakultas);
-            $db->bind(':keterangan', $keterangan);
-            $db->bind(':tarif_laboratorium', $tarif_laboratorium);
-            $db->bind(':satuan_laboratorium', $satuan_laboratorium);
-            $db->bind(':tarif_peralatan', $tarif_peralatan);
-            $db->bind(':satuan_peralatan', $satuan_peralatan);
-            $db->bind(':status', $status);
-            $db->bind(':id', $laboratorium_id);
-
-            if (!empty($gambar_name)) {
-                $db->bind(':gambar', $gambar_name);
-            }
-
-            if ($db->execute()) {
-                header("Location: datalaboratorium_admin.php?status=success_edit");
-                exit;
-            } else {
-                $error_message = "Gagal memperbarui data laboratorium";
-            }
-        } catch (Exception $e) {
-            $error_message = "Terjadi kesalahan: " . $e->getMessage();
-        }
+        echo "Gagal update: " . mysqli_error($koneksi);
     }
 }
+
 ?>
+
+
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -217,11 +182,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <button class="bg-amber-500 hover:bg-amber-600 text-gray-900 p-2 rounded-lg transition-colors" onclick="toggleSidebar()">☰</button>
     </div>
 
-    <?php if ($error_message): ?>
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 shadow-md" role="alert">
-            ❌ <?= $error_message ?>
-        </div>
-    <?php endif; ?>
+    <?php if (!empty($error_message)): ?>
+    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 shadow-md" role="alert">
+        ❌ <?php echo $error_message; ?>
+    </div>
+<?php endif; ?>
+
 
     <div class="bg-white p-6 rounded-xl shadow-lg">
         <div class="flex items-center mb-6 border-b pb-4">
@@ -258,36 +224,59 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     </div>
 
                     <div class="form-group">
-                        <label for="tarif_laboratorium" class="block font-semibold mb-2">Tarif Sewa Laboratorium : <span class="text-red-500">*</span></label>
-                        <div class="tarif-row">
-                            <div class="input-group">
-                                <span class="input-prefix">Rp</span>
-                                <input type="number" id="tarif_laboratorium" name="tarif_laboratorium" class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
-                                       placeholder="Isi Tarif Sewa Laboratorium" required min="0" step="0.01"
-                                       value="<?= htmlspecialchars($laboratorium_data['tarif_laboratorium'] ?? '') ?>">
-                            </div>
-                            <select id="satuan_laboratorium" name="satuan_laboratorium" class="form-input px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" required>
-                                <option value="jam" <?= ($laboratorium_data['satuan_laboratorium'] ?? '') === 'jam' ? 'selected' : '' ?>>/ Jam</option>
-                                <option value="hari" <?= ($laboratorium_data['satuan_laboratorium'] ?? '') === 'hari' ? 'selected' : '' ?>>/ Hari</option>
-                            </select>
-                        </div>
-                    </div>
+    <label class="block font-semibold mb-2">Tarif Sewa Laboratorium : <span class="text-red-500">*</span></label>
+    <div class="tarif-row">
 
-                    <div class="form-group">
-                        <label for="tarif_peralatan" class="block font-semibold mb-2">Tarif Sewa Peralatan : <span class="text-red-500">*</span></label>
-                        <div class="tarif-row">
-                            <div class="input-group">
-                                <span class="input-prefix">Rp</span>
-                                <input type="number" id="tarif_peralatan" name="tarif_peralatan" class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
-                                       placeholder="Isi Tarif Sewa Peralatan" required min="0" step="0.01"
-                                       value="<?= htmlspecialchars($laboratorium_data['tarif_peralatan'] ?? '') ?>">
-                            </div>
-                            <select id="satuan_peralatan" name="satuan_peralatan" class="form-input px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" required>
-                                <option value="jam" <?= ($laboratorium_data['satuan_peralatan'] ?? '') === 'jam' ? 'selected' : '' ?>>/ Jam</option>
-                                <option value="hari" <?= ($laboratorium_data['satuan_peralatan'] ?? '') === 'hari' ? 'selected' : '' ?>>/ Hari</option>
-                            </select>
-                        </div>
-                    </div>
+        <!-- INPUT ASLI (hidden) -->
+        <input type="hidden" 
+               id="tarif_sewa_laboratorium" 
+               name="tarif_sewa_laboratorium"
+               value="<?= $laboratorium_data['tarif_sewa_laboratorium'] ?? '' ?>">
+
+        <!-- INPUT UNTUK USER (formatted) -->
+        <div class="input-group">
+            <span class="input-prefix">Rp</span>
+            <input type="text" 
+                   id="tarif_laboratorium_display"
+                   class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500"
+                   value="<?= number_format($laboratorium_data['tarif_sewa_laboratorium'] ?? 0, 0, ',', '.') ?>">
+        </div>
+
+        <div class="inline-flex items-center px-4 py-3 border border-gray-300 rounded-lg bg-white">
+            <span class="text-sm font-medium">perhari</span>
+        </div>
+        <input type="hidden" name="satuan_laboratorium" value="hari">
+    </div>
+</div>
+
+
+
+<div class="form-group">
+    <label class="block font-semibold mb-2">Tarif Sewa Peralatan : <span class="text-red-500">*</span></label>
+    <div class="tarif-row">
+
+        <input type="hidden" 
+               id="tarif_sewa_peralatan" 
+               name="tarif_sewa_peralatan"
+               value="<?= $laboratorium_data['tarif_sewa_peralatan'] ?? '' ?>">
+
+        <div class="input-group">
+            <span class="input-prefix">Rp</span>
+            <input type="text" 
+                   id="tarif_peralatan_display"
+                   class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500"
+                   value="<?= number_format($laboratorium_data['tarif_sewa_peralatan'] ?? 0, 0, ',', '.') ?>">
+        </div>
+
+        <div class="inline-flex items-center px-4 py-3 border border-gray-300 rounded-lg bg-white">
+            <span class="text-sm font-medium">perhari</span>
+        </div>
+        <input type="hidden" name="satuan_peralatan" value="hari">
+
+    </div>
+</div>
+
+
                 </div>
 
                 <div class="space-y-6">
@@ -326,9 +315,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <div class="form-group">
                         <label for="status" class="block font-semibold mb-2">Status : <span class="text-red-500">*</span></label>
                         <select id="status" name="status" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" required>
-                            <option value="aktif" <?= ($laboratorium_data['status'] ?? '') === 'aktif' ? 'selected' : '' ?>>Aktif</option>
-                            <option value="tidak_aktif" <?= ($laboratorium_data['status'] ?? '') === 'tidak_aktif' ? 'selected' : '' ?>>Tidak Aktif</option>
-                        </select>
+                        <option value="tersedia" <?= ($laboratorium_data['status'] ?? '') === 'tersedia' ? 'selected' : '' ?>>Tersedia</option>
+                        <option value="tidak_tersedia" <?= ($laboratorium_data['status'] ?? '') === 'tidak_tersedia' ? 'selected' : '' ?>>Tidak Tersedia</option>
+                    </select>
+
                     </div>
 
                     <div class="form-group">

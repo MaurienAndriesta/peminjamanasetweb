@@ -64,7 +64,7 @@ $menu_items = [
         <div class="mt-8">
           <a href="login.php" 
              class="inline-block bg-gradient-to-r from-[#004C6D] to-[#007B9E] text-white px-10 py-3.5 rounded-full shadow-lg hover:opacity-90 hover:scale-105 transition">
-            🚀 Masuk ke Sistem
+            🚀 Masuk 
           </a>
         </div>
       </div>

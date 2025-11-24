@@ -2,13 +2,32 @@
 session_start();
 include 'koneksi.php'; 
 
+// 🔹 Cek apakah sudah ada super_admin di database
+$cekSuperAdmin = $koneksi->query("SELECT COUNT(*) AS total FROM tbl_user WHERE role = 'super_admin'");
+$dataAdmin = $cekSuperAdmin->fetch_assoc();
+
+if ($dataAdmin['total'] == 0) {
+    // Kalau belum ada super admin, buat default akun
+    $fullname = "Super Admin ITPLN";
+    $email = "superadmin@itpln.ac.id";
+    $passwordHash = password_hash("password", PASSWORD_DEFAULT);
+    $role = "super_admin";
+
+    $insertAdmin = $koneksi->prepare("INSERT INTO tbl_user (fullname, email, password, role) VALUES (?, ?, ?, ?)");
+    $insertAdmin->bind_param("ssss", $fullname, $email, $passwordHash, $role);
+
+    $insertAdmin->execute();
+}
+
+
+
+// 🔹 Proses login
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = $_POST['email'] ?? '';
     $password = $_POST['password'] ?? '';
+    $error = '';
 
-    // Cek user di database
-    $stmt = $koneksi->prepare("SELECT * FROM users WHERE email = ?");
-
+    $stmt = $koneksi->prepare("SELECT * FROM tbl_user WHERE email = ?");
     $stmt->bind_param("s", $email);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -16,12 +35,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($result->num_rows > 0) {
         $user = $result->fetch_assoc();
 
-        // Verifikasi password (pastikan register pakai password_hash)
         if (password_verify($password, $user['password'])) {
-            $_SESSION['user'] = $user['fullname'];
-            $_SESSION['fullname'] = $user['fullname']; // opsional
-            header("Location: dashboarduser.php");
-            exit;
+             // Simpan session yang seragam
+              $_SESSION['user_id'] = $user['id'];      // Wajib pakai ini
+              $_SESSION['fullname'] = $user['fullname'];
+              $_SESSION['role'] = $user['role'];
+
+            // 🔸 Redirect sesuai role
+             if ($user['role'] === 'super_admin') {
+        header("Location: superadmin/dashboard.php");
+    } elseif ($user['role'] === 'admin') {
+        header("Location: admin/dashboardadmin.php");
+    } else {
+        header("Location: users/dashboarduser.php");
+    }
+    exit;
         } else {
             $error = "Password salah!";
         }
@@ -30,8 +58,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 ?>
-
-
 
 <!DOCTYPE html>
 <html lang="id">
@@ -60,7 +86,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       min-height:480px;
     }
 
-    /* Kiri */
     .left {
       background:#d6ebf2;
       flex:1;
@@ -71,33 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       position:relative;
       padding:30px;
     }
-    .switch-tab {
-      position:absolute;
-      right:-40px;
-      top:50%;
-      transform:translateY(-50%);
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-    }
-    .switch-tab a {
-      text-decoration:none;
-      background:#fff;
-      color:#333;
-      padding:6px 18px;
-      border-radius:20px;
-      font-size:14px;
-      text-align:center;
-      transition:all 0.2s;
-    }
-    .switch-tab a.active {
-      background:#2c3e50;
-      color:#fff;
-      font-weight:bold;
-    }
-    .switch-tab a:hover {background:#34495e;color:#fff;}
 
-    /* Kanan */
     .right {
       flex:1.3;
       padding:50px;
@@ -138,25 +137,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       transition:0.2s;
     }
     .form-box button:hover {background:#2c3e50;color:#fff;}
-
-    .form-box .extra {
-      margin-top:15px;
-      text-align:center;
-    }
+    .form-box .extra {margin-top:15px;text-align:center;}
     .error {color:red;font-size:14px;text-align:center;margin-top:10px;}
   </style>
 </head>
 <body>
   <div class="container">
-    <!-- Bagian Kiri -->
-    <div class="left">
-      <div class="switch-tab">
-        
-        <a href="login.php" class="active">Login</a>
-      </div>
-    </div>
-
-    <!-- Bagian Kanan -->
+    <div class="left"></div>
     <div class="right">
       <img src="pln.png" alt="Logo IT-PLN">
       <div class="form-box">
@@ -166,10 +153,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <input type="password" name="password" placeholder="Password" required>
           <button type="submit">Login</button>
           <div class="extra">
-            <div class="extra">
-            <a href="register.php">Belum Punya Akun? Register Sekarang!</a>
-          </div>
-
+            <a href="register.php">Belum punya akun? Register sekarang!</a>
           </div>
         </form>
         <?php if (!empty($error)): ?>

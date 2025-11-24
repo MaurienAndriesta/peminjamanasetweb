@@ -1,146 +1,94 @@
 <?php
-// Include database configuration
-require_once 'config/database.php';
+require_once '../koneksi.php';
 
-// Initialize database connection
-$db = new Database();
-
-// Get Usaha ID from URL parameter
+// Get usaha ID
 $usaha_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-
 if ($usaha_id <= 0) {
     header('Location: datausaha_admin.php');
     exit;
 }
 
-// Inisialisasi variabel untuk form data dan pesan
+// Variabel
 $usaha_data = [];
-$errors = [];
 $error_message = null;
 
-// --- 1. Ambil data lama sebelum POST (untuk pre-fill atau fallback) ---
-$db->query("SELECT * FROM usaha WHERE id = :id AND status = 'aktif'");
-$db->bind(':id', $usaha_id);
-try {
-    $fetched_data = $db->single();
-    if (!$fetched_data) {
-        header('Location: datausaha_admin.php');
-        exit;
-    }
-    $usaha_data = $fetched_data;
-} catch (Exception $e) {
-    $error_message = "Terjadi kesalahan saat mengambil data: " . $e->getMessage();
+// ---- 1. Ambil data lama ----
+$stmt = mysqli_prepare($koneksi, "SELECT id, nama, kapasitas, tarif_eksternal, keterangan, gambar FROM tbl_usaha WHERE id=?");
+mysqli_stmt_bind_param($stmt, "i", $usaha_id);
+mysqli_stmt_execute($stmt);
+$result = mysqli_stmt_get_result($stmt);
+
+if ($result && mysqli_num_rows($result) > 0) {
+    $usaha_data = mysqli_fetch_assoc($result);
+} else {
+    header("Location: datausaha_admin.php?error=not_found");
+    exit;
 }
+mysqli_stmt_close($stmt);
+$periode = $_REQUEST['periode'] ?? 'bulan';
 
 
-// --- 2. Processing form submission ---
+
+// ---- 2. Jika form disubmit ----
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+
     $nama_usaha = trim($_POST['nama_usaha'] ?? '');
     $kapasitas = trim($_POST['kapasitas'] ?? '');
-    $lokasi = trim($_POST['lokasi'] ?? '');
-    $tipe_tarif = $_POST['tipe_tarif'] ?? 'berbayar';
-    $tarif_internal = (float)($_POST['tarif_internal'] ?? 0);
-    $tarif_eksternal = (float)($_POST['tarif_eksternal'] ?? 0);
+    $tarif_eksternal = trim($_POST['tarif_eksternal'] ?? '');
     $keterangan = trim($_POST['keterangan'] ?? '');
-    
-    // Validation
-    if (empty($nama_usaha)) $errors[] = "Nama usaha harus diisi";
-    if (empty($kapasitas)) $errors[] = "Kapasitas harus diisi";
-    if (empty($lokasi)) $errors[] = "Lokasi harus diisi";
-    if (empty($keterangan)) $errors[] = "Keterangan harus diisi";
-    
-    // Handle Tarif
-    if ($tipe_tarif === 'gratis') {
-        $tarif_internal = 0;
-        $tarif_eksternal = 0;
-    } else {
-        if ($tarif_internal <= 0) $errors[] = "Tarif internal harus lebih dari 0 jika berbayar";
-        if ($tarif_eksternal <= 0) $errors[] = "Tarif eksternal harus lebih dari 0 jika berbayar";
-    }
 
-    // --- Handle image upload (Perbaikan Gambar) ---
-    $gambar_name = $usaha_data['gambar']; // Default: pertahankan gambar lama
-    $upload_path = '';
-    
-    if (isset($_FILES['gambar']) && $_FILES['gambar']['error'] == 0) {
-        $allowed_types = ['image/jpeg', 'image/png', 'image/jpg'];
-        $max_size = 2 * 1024 * 1024; // 2MB
-        $upload_dir = 'assets/images/';
-        
-        if (!in_array($_FILES['gambar']['type'], $allowed_types)) {
-            $errors[] = "Format gambar harus JPG, JPEG, atau PNG";
-        } elseif ($_FILES['gambar']['size'] > $max_size) {
-            $errors[] = "Ukuran gambar maksimal 2MB";
-        } else {
-            // Proses upload gambar baru
-            if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0755, true);
-            }
-            $file_ext = pathinfo($_FILES['gambar']['name'], PATHINFO_EXTENSION);
-            $gambar_name_new = 'usaha_' . $usaha_id . '_' . time() . '.' . $file_ext;
-            $upload_path = $upload_dir . $gambar_name_new;
-            
-            if (move_uploaded_file($_FILES['gambar']['tmp_name'], $upload_path)) {
-                // Hapus gambar lama jika ada dan berhasil upload gambar baru
-                if (!empty($usaha_data['gambar']) && file_exists($upload_dir . $usaha_data['gambar'])) {
-                     unlink($upload_dir . $usaha_data['gambar']);
-                }
-                $gambar_name = $gambar_name_new; // Set nama gambar baru
-            } else {
-                $errors[] = "Gagal mengupload gambar baru";
-            }
-        }
-    }
-    
-    // Jika ada error, tampilkan error dan isi form dengan data POST yang gagal
-    if (!empty($errors)) {
-        $error_message = implode("<br>", $errors);
-        // Fallback data form yang sudah diisi
-        $usaha_data = array_merge($usaha_data, [
-            'nama' => $nama_usaha,
-            'kapasitas' => $kapasitas,
-            'lokasi' => $lokasi,
-            'tarif_internal' => $tarif_internal,
-            'tarif_eksternal' => $tarif_eksternal,
-            'keterangan' => $keterangan,
-            'gambar' => $gambar_name // Gunakan gambar name yang dipertahankan/baru
-        ]);
+    // Validasi sederhana
+    if ($nama_usaha == '' || $kapasitas == '' || $tarif_eksternal == '') {
+        $error_message = "Semua field wajib diisi.";
     } else {
-        try {
-            // Prepare update query
-            $update_fields = "nama = :nama, kapasitas = :kapasitas, lokasi = :lokasi, 
-                              tarif_internal = :tarif_internal, tarif_eksternal = :tarif_eksternal, 
-                              keterangan = :keterangan, updated_at = NOW()";
-            
-            if (!empty($gambar_name)) {
-                $update_fields .= ", gambar = :gambar";
+
+        // ---- Cek upload gambar ----
+        $gambar_name = $usaha_data['gambar']; // default: gambar lama
+
+        if (isset($_FILES['gambar']) && $_FILES['gambar']['error'] === UPLOAD_ERR_OK) {
+            $ext = pathinfo($_FILES['gambar']['name'], PATHINFO_EXTENSION);
+            $new_name = "usaha_" . time() . "." . $ext;
+
+            $target = "../uploads/" . $new_name;
+
+            if (move_uploaded_file($_FILES['gambar']['tmp_name'], $target)) {
+                $gambar_name = $new_name;
             }
-            
-            $db->query("UPDATE usaha SET $update_fields WHERE id = :id");
-            $db->bind(':nama', $nama_usaha);
-            $db->bind(':kapasitas', $kapasitas);
-            $db->bind(':lokasi', $lokasi);
-            $db->bind(':tarif_internal', $tarif_internal);
-            $db->bind(':tarif_eksternal', $tarif_eksternal);
-            $db->bind(':keterangan', $keterangan);
-            $db->bind(':id', $usaha_id);
-            
-            if (!empty($gambar_name)) {
-                $db->bind(':gambar', $gambar_name);
-            }
-            
-            if ($db->execute()) {
-                header("Location: datausaha_admin.php?status=success_edit");
-                exit;
-            } else {
-                $error_message = "Gagal memperbarui data usaha";
-            }
-        } catch (Exception $e) {
-            $error_message = "Terjadi kesalahan: " . $e->getMessage();
         }
+
+        // ---- 3. UPDATE DATA ----
+        $update_fields = "nama=?, kapasitas=?, tarif_eksternal=?, keterangan=?, updated_at=NOW()";
+        $types = "ssds";
+        $params = [$nama_usaha, $kapasitas, $tarif_eksternal, $keterangan];
+
+        if (!empty($gambar_name)) {
+            $update_fields .= ", gambar=?";
+            $types .= "s";
+            $params[] = $gambar_name;
+        }
+
+        $update_fields .= " WHERE id=?";
+        $types .= "i";
+        $params[] = $usaha_id;
+
+        $sql = "UPDATE tbl_usaha SET $update_fields";
+        $stmt = mysqli_prepare($koneksi, $sql);
+
+        mysqli_stmt_bind_param($stmt, $types, ...$params);
+
+        if (mysqli_stmt_execute($stmt)) {
+            header("Location: datausaha_admin.php?status=success_edit");
+            exit;
+        } else {
+            $error_message = "Gagal update: " . mysqli_error($koneksi);
+        }
+
+        mysqli_stmt_close($stmt);
     }
 }
 ?>
+
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -210,7 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <a href="datausaha_admin.php" class="bg-gray-700 hover:bg-gray-800 text-white p-3 rounded-lg mr-4 transition-colors">←</a>
             
             <div>
-                <h1 class="text-2xl font-bold text-amber-700">Edit Data Usaha: <?= htmlspecialchars($usaha_data['nama'] ?? 'N/A') ?></h1>
+                <h1 class="text-2xl font-bold text-amber-700">Edit Data Usaha</h1>
                 <p class="text-gray-500 text-sm">Perbarui informasi usaha</p>
             </div>
         </div>
@@ -255,49 +203,28 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 </div>
 
                 <div class="space-y-6">
-                    <div class="form-group">
-                        <label for="lokasi" class="block font-semibold mb-2">Lokasi : <span class="text-red-500">*</span></label>
-                        <input type="text" id="lokasi" name="lokasi" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
-                               placeholder="Isi Lokasi" required
-                               value="<?= htmlspecialchars($usaha_data['lokasi'] ?? '') ?>">
-                    </div>
+                    
 
-                    <div class="form-group">
-                        <label class="block font-semibold mb-2">Tipe Tarif : <span class="text-red-500">*</span></label>
-                        <div class="flex items-center gap-6">
-                            <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="radio" id="gratis" name="tipe_tarif" value="gratis" class="form-radio text-amber-500 h-4 w-4"
-                                       <?= (!isset($usaha_data['tarif_internal']) || $usaha_data['tarif_internal'] == 0) ? 'checked' : '' ?>>
-                                Gratis
-                            </label>
-                            <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="radio" id="berbayar" name="tipe_tarif" value="berbayar" class="form-radio text-amber-500 h-4 w-4"
-                                       <?= (isset($usaha_data['tarif_internal']) && $usaha_data['tarif_internal'] > 0) ? 'checked' : '' ?>>
-                                Berbayar
-                            </label>
-                             <div class="flex items-center gap-2 text-sm text-gray-600 border-l pl-4">
-                                <label class="flex items-center gap-1 cursor-pointer">
-                                    <input type="radio" id="hari" name="periode" value="hari" class="form-radio text-amber-500 h-4 w-4" checked> Hari
-                                </label>
-                                <span>/</span>
-                                <label class="flex items-center gap-1 cursor-pointer">
-                                    <input type="radio" id="jam" name="periode" value="jam" class="form-radio text-amber-500 h-4 w-4"> Jam
-                                </label>
-                            </div>
-                        </div>
-                    </div>
+                    <div>
+        <label class="block font-semibold mb-2">Tipe Tarif : <span class="text-red-500">*</span></label>
+        <div class="flex items-center gap-6 mt-1">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="periode" value="bulan" <?= ($periode === 'bulan') ? 'checked' : '' ?>>
+                    Bulan
+                </label>
+
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="periode" value="tahun" <?= ($periode === 'tahun') ? 'checked' : '' ?>>
+                    Tahun
+                </label>
+            </div>
+
+      </div>
 
                     <div class="form-group" id="tarifSection">
-                        <label class="block font-semibold mb-2">Tarif Sewa Internal/Eksternal IT PLN : <span class="text-red-500">*</span></label>
+                        <label class="block font-semibold mb-2">Tarif Sewa Eksternal : <span class="text-red-500">*</span></label>
                         <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <input type="number" name="tarif_internal" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
-                                       placeholder="Isi Tarif Internal" 
-                                       value="<?= isset($usaha_data['tarif_internal']) && $usaha_data['tarif_internal'] > 0 ? $usaha_data['tarif_internal'] : '' ?>">
-                                <div class="flex items-center justify-start mt-2 text-sm text-gray-600">
-                                    <span class="font-medium">Internal</span>
-                                </div>
-                            </div>
+                            
                             <div>
                                 <input type="number" name="tarif_eksternal" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
                                        placeholder="Isi Tarif Eksternal" 

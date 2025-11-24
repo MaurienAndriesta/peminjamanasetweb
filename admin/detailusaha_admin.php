@@ -1,11 +1,8 @@
 <?php
-// Include database configuration
-require_once 'config/database.php';
+require_once '../koneksi.php';
+$db = $koneksi;
 
-// Initialize database connection
-$db = new Database();
-
-// Get usaha ID from URL parameter
+// Ambil ID usaha dari URL
 $usaha_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
 if ($usaha_id <= 0) {
@@ -14,36 +11,31 @@ if ($usaha_id <= 0) {
 }
 
 // Query untuk mendapatkan detail usaha
-$db->query("SELECT id, nama, kapasitas, lokasi, tarif_internal, tarif_eksternal, keterangan, gambar, created_at, updated_at 
-            FROM usaha 
-            WHERE id = :id AND status = 'aktif'");
-$db->bind(':id', $usaha_id);
+$sql = "SELECT id, nama, kapasitas, tarif_eksternal, keterangan, gambar, created_at, updated_at, status 
+        FROM tbl_usaha 
+        WHERE id = $usaha_id AND status = 'tersedia'";
+$result = mysqli_query($db, $sql);
 
 $usaha_detail = [];
 $error_message = null;
 
-try {
-    $usaha_detail = $db->single();
-    
-    if (!$usaha_detail) {
-        $error_message = "Data usaha tidak ditemukan atau sudah tidak aktif.";
-    }
-} catch (Exception $e) {
-    $error_message = "Terjadi kesalahan saat mengambil data: Pastikan tabel 'usaha' sudah memiliki kolom: gambar, keterangan, tarif_internal, dan tarif_eksternal.";
-    $usaha_detail = [];
+if ($result && mysqli_num_rows($result) > 0) {
+    $usaha_detail = mysqli_fetch_assoc($result);
+} else {
+    $error_message = "Data usaha tidak ditemukan atau sudah tidak tersedia.";
 }
 
-// Process keterangan (split by newline for display)
+// Proses keterangan (pisah per baris)
 $keterangan_array = [];
-if (isset($usaha_detail['keterangan']) && $usaha_detail['keterangan']) {
+if (!empty($usaha_detail['keterangan'])) {
     $keterangan_text = str_replace('\n', "\n", $usaha_detail['keterangan']);
     $keterangan_array = explode("\n", $keterangan_text);
-    $keterangan_array = array_filter($keterangan_array, 'trim'); 
+    $keterangan_array = array_filter($keterangan_array, 'trim');
 }
 
-// Process gambar (ambil gambar pertama)
+// Ambil gambar pertama (jika ada banyak)
 $image_path = '';
-if (isset($usaha_detail['gambar']) && !empty($usaha_detail['gambar'])) {
+if (!empty($usaha_detail['gambar'])) {
     $images = explode(',', $usaha_detail['gambar']);
     $image_path = trim($images[0]);
 }
@@ -59,11 +51,7 @@ $is_usaha_available = !empty($usaha_detail);
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        /* CSS khusus untuk integrasi dan font */
-        body { 
-            font-family: 'Poppins', sans-serif; 
-        }
-        /* Style untuk list keterangan */
+        body { font-family: 'Poppins', sans-serif; }
         .keterangan-list {
             list-style: none; padding: 0; margin: 0;
             counter-reset: keterangan-counter;
@@ -76,7 +64,7 @@ $is_usaha_available = !empty($usaha_detail);
         .keterangan-list li::before {
             content: counter(keterangan-counter) ". ";
             position: absolute; left: 0; top: 0;
-            font-weight: 600; color: #f59e0b; /* Amber */
+            font-weight: 600; color: #f59e0b;
         }
     </style>
 </head>
@@ -90,7 +78,7 @@ $is_usaha_available = !empty($usaha_detail);
         <button class="bg-amber-500 hover:bg-amber-600 text-gray-900 p-2 rounded-lg transition-colors" onclick="toggleSidebar()">☰</button>
     </div>
 
-    <?php if (isset($error_message)): ?>
+    <?php if ($error_message): ?>
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 shadow-md" role="alert">
             ❌ <?= htmlspecialchars($error_message) ?>
             <div class="text-center pt-4">
@@ -120,7 +108,7 @@ $is_usaha_available = !empty($usaha_detail);
             <div class="space-y-6">
                 <div class="room-image relative w-full h-72 overflow-hidden rounded-xl bg-gray-100 flex items-center justify-center shadow-md">
                     <?php if (!empty($usaha_detail['gambar'])): ?>
-                        <img src="assets/images/<?= htmlspecialchars($image_path) ?>" 
+                        <img src="uploads/usaha/<?= htmlspecialchars($image_path) ?>" 
                              alt="<?= htmlspecialchars($usaha_detail['nama']) ?>"
                              class="w-full h-full object-cover rounded-xl"
                              onerror="this.parentElement.innerHTML='<div class=text-gray-500>Gambar tidak tersedia</div>'">
@@ -143,10 +131,7 @@ $is_usaha_available = !empty($usaha_detail);
                         </div>
                     </div>
                     
-                    <div class="detail-item">
-                        <label class="block font-semibold mb-1 text-sm text-gray-600">Lokasi</label>
-                        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 text-gray-800"><?= htmlspecialchars($usaha_detail['lokasi']) ?></div>
-                    </div>
+                    
                 </div>
             </div>
 
@@ -154,20 +139,11 @@ $is_usaha_available = !empty($usaha_detail);
                 
                 <h3 class="text-xl font-semibold border-b pb-2 text-gray-700">Informasi Tarif (Per Hari)</h3>
                 
-                <?php if ($usaha_detail['tarif_internal'] > 0 || $usaha_detail['tarif_eksternal'] > 0): ?>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div class="p-4 rounded-xl border border-amber-300 bg-amber-50">
-                            <h4 class="text-base font-semibold text-gray-700 mb-2">💼 Tarif Sewa Internal</h4>
-                            <div class="text-xl font-extrabold text-amber-700">
-                                Rp <?= number_format($usaha_detail['tarif_internal'], 0, ',', '.') ?>
-                            </div>
-                        </div>
-
-                        <div class="p-4 rounded-xl border border-amber-300 bg-amber-50">
-                            <h4 class="text-base font-semibold text-gray-700 mb-2">🏢 Tarif Sewa Eksternal</h4>
-                            <div class="text-xl font-extrabold text-amber-700">
-                                Rp <?= number_format($usaha_detail['tarif_eksternal'], 0, ',', '.') ?>
-                            </div>
+                <?php if ($usaha_detail['tarif_eksternal'] > 0): ?>
+                    <div class="p-4 rounded-xl border border-amber-300 bg-amber-50">
+                        <h4 class="text-base font-semibold text-gray-700 mb-2">🏢 Tarif Sewa Eksternal</h4>
+                        <div class="text-xl font-extrabold text-amber-700">
+                            Rp <?= number_format($usaha_detail['tarif_eksternal'], 0, ',', '.') ?>
                         </div>
                     </div>
                 <?php else: ?>

@@ -1,147 +1,118 @@
 <?php
-// Include database configuration
-require_once 'config/database.php';
+require_once '../koneksi.php';
+$db = $koneksi;
 
-// Initialize database connection
-$db = new Database();
-
-// Get fasilitas ID from URL parameter
+// Ambil ID dari URL
 $fasilitas_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-
 if ($fasilitas_id <= 0) {
     header('Location: datafasilitas_admin.php');
     exit;
 }
 
-// Inisialisasi variabel untuk form data dan pesan
 $fasilitas_data = [];
-$errors = [];
 $error_message = null;
 
-// --- 1. Ambil data lama sebelum POST (untuk pre-fill atau fallback) ---
-// Perhatian: Ada logika CREATE TABLE di kode asli yang tidak diperlukan di sini, saya hapus.
-$db->query("SELECT * FROM fasilitas WHERE id = :id AND status = 'aktif'");
-$db->bind(':id', $fasilitas_id);
-try {
-    $fetched_data = $db->single();
-    if (!$fetched_data) {
-        header('Location: datafasilitas_admin.php');
-        exit;
-    }
-    $fasilitas_data = $fetched_data;
-} catch (Exception $e) {
-    $error_message = "Terjadi kesalahan saat mengambil data: " . $e->getMessage();
+// --- 1. Ambil data lama dari database ---
+$sql = "SELECT * FROM tbl_fasilitas WHERE id = $fasilitas_id AND status = 'tersedia'";
+$result = mysqli_query($db, $sql);
+
+if ($result && mysqli_num_rows($result) > 0) {
+    $fasilitas_data = mysqli_fetch_assoc($result);
+} else {
+    header('Location: datafasilitas_admin.php');
+    exit;
 }
 
-
-// --- 2. Processing form submission ---
+// --- 2. Jika form disubmit ---
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $nama_fasilitas = trim($_POST['nama_fasilitas'] ?? '');
     $kapasitas = trim($_POST['kapasitas'] ?? '');
-    $lokasi = trim($_POST['lokasi'] ?? '');
     $tipe_tarif = $_POST['tipe_tarif'] ?? 'berbayar';
     $tarif_internal = (float)($_POST['tarif_internal'] ?? 0);
     $tarif_eksternal = (float)($_POST['tarif_eksternal'] ?? 0);
     $keterangan = trim($_POST['keterangan'] ?? '');
-    
-    // Validation
+
+    $errors = [];
+
+    // Validasi
     if (empty($nama_fasilitas)) $errors[] = "Nama fasilitas harus diisi";
     if (empty($kapasitas)) $errors[] = "Kapasitas harus diisi";
-    if (empty($lokasi)) $errors[] = "Lokasi harus diisi";
     if (empty($keterangan)) $errors[] = "Keterangan harus diisi";
-    
-    // Handle Tarif
+
     if ($tipe_tarif === 'gratis') {
         $tarif_internal = 0;
         $tarif_eksternal = 0;
     } else {
-        if ($tarif_internal <= 0) $errors[] = "Tarif internal harus lebih dari 0 jika berbayar";
-        if ($tarif_eksternal <= 0) $errors[] = "Tarif eksternal harus lebih dari 0 jika berbayar";
+        if ($tarif_internal <= 0) $errors[] = "Tarif internal harus lebih dari 0";
+        if ($tarif_eksternal <= 0) $errors[] = "Tarif eksternal harus lebih dari 0";
     }
 
-    // --- Handle image upload (Perbaikan Gambar) ---
-    $gambar_name = $fasilitas_data['gambar']; // Default: pertahankan gambar lama
-    $upload_path = '';
-    
+    // --- Upload Gambar ---
+    $gambar_name = $fasilitas_data['gambar'];
     if (isset($_FILES['gambar']) && $_FILES['gambar']['error'] == 0) {
         $allowed_types = ['image/jpeg', 'image/png', 'image/jpg'];
         $max_size = 2 * 1024 * 1024; // 2MB
         $upload_dir = 'assets/images/';
-        
+
         if (!in_array($_FILES['gambar']['type'], $allowed_types)) {
             $errors[] = "Format gambar harus JPG, JPEG, atau PNG";
         } elseif ($_FILES['gambar']['size'] > $max_size) {
             $errors[] = "Ukuran gambar maksimal 2MB";
         } else {
-            // Proses upload gambar baru
-            if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0755, true);
-            }
+            if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
+
             $file_ext = pathinfo($_FILES['gambar']['name'], PATHINFO_EXTENSION);
             $gambar_name_new = 'fasilitas_' . $fasilitas_id . '_' . time() . '.' . $file_ext;
             $upload_path = $upload_dir . $gambar_name_new;
-            
+
             if (move_uploaded_file($_FILES['gambar']['tmp_name'], $upload_path)) {
-                // Hapus gambar lama jika ada dan berhasil upload gambar baru
                 if (!empty($fasilitas_data['gambar']) && file_exists($upload_dir . $fasilitas_data['gambar'])) {
-                     unlink($upload_dir . $fasilitas_data['gambar']);
+                    unlink($upload_dir . $fasilitas_data['gambar']);
                 }
-                $gambar_name = $gambar_name_new; // Set nama gambar baru
+                $gambar_name = $gambar_name_new;
             } else {
                 $errors[] = "Gagal mengupload gambar baru";
             }
         }
     }
-    
-    // Jika ada error, tampilkan error dan isi form dengan data POST yang gagal
-    if (!empty($errors)) {
+
+    // Jika tidak ada error → update database
+    if (empty($errors)) {
+        $gambar_sql = !empty($gambar_name) ? ", gambar = '$gambar_name'" : "";
+            $update_sql = "
+            UPDATE tbl_fasilitas 
+            SET 
+                nama = '$nama_fasilitas',
+                kapasitas = '$kapasitas',
+                tarif_internal = '$tarif_internal',
+                tarif_eksternal = '$tarif_eksternal',
+                keterangan = '$keterangan',
+                updated_at = NOW()
+                $gambar_sql
+            WHERE id = $fasilitas_id
+        ";
+
+
+        if (mysqli_query($db, $update_sql)) {
+            header("Location: datafasilitas_admin.php?status=success_edit");
+            exit;
+        } else {
+            $error_message = "Gagal memperbarui data: " . mysqli_error($db);
+        }
+    } else {
         $error_message = implode("<br>", $errors);
-        // Fallback data form yang sudah diisi
         $fasilitas_data = array_merge($fasilitas_data, [
             'nama' => $nama_fasilitas,
             'kapasitas' => $kapasitas,
-            'lokasi' => $lokasi,
             'tarif_internal' => $tarif_internal,
             'tarif_eksternal' => $tarif_eksternal,
             'keterangan' => $keterangan,
-            'gambar' => $gambar_name // Gunakan gambar name yang dipertahankan/baru
+            'gambar' => $gambar_name
         ]);
-    } else {
-        try {
-            // Prepare update query
-            $update_fields = "nama = :nama, kapasitas = :kapasitas, lokasi = :lokasi, 
-                              tarif_internal = :tarif_internal, tarif_eksternal = :tarif_eksternal, 
-                              keterangan = :keterangan, updated_at = NOW()";
-            
-            if (!empty($gambar_name)) {
-                $update_fields .= ", gambar = :gambar";
-            }
-            
-            $db->query("UPDATE fasilitas SET $update_fields WHERE id = :id");
-            $db->bind(':nama', $nama_fasilitas);
-            $db->bind(':kapasitas', $kapasitas);
-            $db->bind(':lokasi', $lokasi);
-            $db->bind(':tarif_internal', $tarif_internal);
-            $db->bind(':tarif_eksternal', $tarif_eksternal);
-            $db->bind(':keterangan', $keterangan);
-            $db->bind(':id', $fasilitas_id);
-            
-            if (!empty($gambar_name)) {
-                $db->bind(':gambar', $gambar_name);
-            }
-            
-            if ($db->execute()) {
-                header("Location: datafasilitas_admin.php?status=success_edit");
-                exit;
-            } else {
-                $error_message = "Gagal memperbarui data fasilitas";
-            }
-        } catch (Exception $e) {
-            $error_message = "Terjadi kesalahan: " . $e->getMessage();
-        }
     }
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -211,12 +182,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <a href="datafasilitas_admin.php" class="bg-gray-700 hover:bg-gray-800 text-white p-3 rounded-lg mr-4 transition-colors">←</a>
             
             <div>
-                <h1 class="text-2xl font-bold text-amber-700">Edit Data Fasilitas: <?= htmlspecialchars($fasilitas_data['nama'] ?? 'N/A') ?></h1>
+                <h1 class="text-2xl font-bold text-amber-700">Edit Data Fasilitas</h1>
                 <p class="text-gray-500 text-sm">Perbarui informasi fasilitas</p>
             </div>
         </div>
 
-        <form method="POST" enctype="multipart/form-data" id="editForm">
+       <form method="POST" enctype="multipart/form-data" id="editForm">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
                 
                 <div class="space-y-6">
@@ -243,25 +214,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <div class="form-group">
                         <label for="nama_fasilitas" class="block font-semibold mb-2">Fasilitas : <span class="text-red-500">*</span></label>
                         <input type="text" id="nama_fasilitas" name="nama_fasilitas" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
-                               placeholder="Isi Nama Fasilitas" required 
+                               placeholder="Isi Fasilitas" required 
                                value="<?= htmlspecialchars($fasilitas_data['nama'] ?? '') ?>">
                     </div>
 
                     <div class="form-group">
-                        <label for="kapasitas" class="block font-semibold mb-2">Kapasitas : <span class="text-red-500">*</span></label>
-                        <input type="text" id="kapasitas" name="kapasitas" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
-                               placeholder="Isi Kapasitas" required
-                               value="<?= htmlspecialchars($fasilitas_data['kapasitas'] ?? '') ?>">
+                    <label for="kapasitas" class="block font-semibold mb-2">Kapasitas : <span class="text-red-500">*</span></label>
+                    <select id="kapasitas" name="kapasitas" required
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500">
+                        <option value="">-- Pilih Kapasitas --</option>
+                        <option value="Dalam Kota" <?= ($fasilitas_data['kapasitas'] ?? '') == 'Dalam Kota' ? 'selected' : '' ?>>Dalam Kota</option>
+                        <option value="Luar Kota" <?= ($fasilitas_data['kapasitas'] ?? '') == 'Luar Kota' ? 'selected' : '' ?>>Luar Kota</option>
+                        <option value="Standar" <?= ($fasilitas_data['kapasitas'] ?? '') == 'Standar' ? 'selected' : '' ?>>Standar</option>
+                    </select>
                     </div>
+
                 </div>
 
                 <div class="space-y-6">
-                    <div class="form-group">
-                        <label for="lokasi" class="block font-semibold mb-2">Lokasi : <span class="text-red-500">*</span></label>
-                        <input type="text" id="lokasi" name="lokasi" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
-                               placeholder="Isi Lokasi" required
-                               value="<?= htmlspecialchars($fasilitas_data['lokasi'] ?? '') ?>">
-                    </div>
+                    
 
                     <div class="form-group">
                         <label class="block font-semibold mb-2">Tipe Tarif : <span class="text-red-500">*</span></label>
@@ -319,10 +290,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             </div>
 
             <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-200">
-                <a href="datafasilitas_admin.php" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold px-6 py-3 rounded-lg shadow transition-colors"
-   onclick="confirmCancel(event);">
-    Batal
-</a>
+                <a href="dataruangmultiguna_admin.php" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold px-6 py-3 rounded-lg shadow transition-colors"
+                onclick="confirmCancel(event);">
+                    Batal
+                </a>
 
                 <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-semibold px-6 py-3 rounded-lg shadow transition-colors">
                     Simpan Perubahan

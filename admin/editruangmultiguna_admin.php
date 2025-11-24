@@ -1,39 +1,32 @@
 <?php
-// Include database configuration
-require_once 'config/database.php';
+require_once '../koneksi.php';
+$db = $koneksi;
 
-// Initialize database connection
-$db = new Database();
-
-// Get ruangan ID from URL parameter
+// Ambil ID dari URL
 $ruangan_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-
 if ($ruangan_id <= 0) {
     header('Location: dataruangmultiguna_admin.php');
     exit;
 }
 
-// Inisialisasi variabel untuk form data dan pesan
 $ruangan_data = [];
 $errors = [];
 $error_message = null;
 
-// --- 1. Ambil data lama sebelum POST (untuk pre-fill atau fallback) ---
-$db->query("SELECT * FROM ruangan_multiguna WHERE id = :id AND status = 'aktif'");
-$db->bind(':id', $ruangan_id);
-try {
-    $fetched_data = $db->single();
-    if (!$fetched_data) {
-        header('Location: dataruangmultiguna_admin.php');
-        exit;
-    }
-    $ruangan_data = $fetched_data;
-} catch (Exception $e) {
-    $error_message = "Terjadi kesalahan saat mengambil data: " . $e->getMessage();
+// --- 1. Ambil data lama sebelum POST (untuk pre-fill) ---
+$stmt = $db->prepare("SELECT * FROM tbl_ruangmultiguna WHERE id = ? AND status = 'tersedia'");
+$stmt->bind_param("i", $ruangan_id);
+$stmt->execute();
+$result = $stmt->get_result();
+$fetched_data = $result->fetch_assoc();
+
+if (!$fetched_data) {
+    header('Location: dataruangmultiguna_admin.php');
+    exit;
 }
+$ruangan_data = $fetched_data;
 
-
-// --- 2. Processing form submission ---
+// --- 2. Proses form ketika disubmit ---
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $nama_ruang = trim($_POST['nama_ruang'] ?? '');
     $kapasitas = trim($_POST['kapasitas'] ?? '');
@@ -42,57 +35,50 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $tarif_internal = (float)($_POST['tarif_internal'] ?? 0);
     $tarif_eksternal = (float)($_POST['tarif_eksternal'] ?? 0);
     $keterangan = trim($_POST['keterangan'] ?? '');
-    
-    // Validation
+
+    // Validasi
     if (empty($nama_ruang)) $errors[] = "Nama ruang harus diisi";
     if (empty($kapasitas)) $errors[] = "Kapasitas harus diisi";
     if (empty($lokasi)) $errors[] = "Lokasi harus diisi";
     if (empty($keterangan)) $errors[] = "Keterangan harus diisi";
-    
-    // Handle Tarif
+
     if ($tipe_tarif === 'gratis') {
         $tarif_internal = 0;
         $tarif_eksternal = 0;
     } else {
-        if ($tarif_internal <= 0) $errors[] = "Tarif internal harus lebih dari 0 jika berbayar";
-        if ($tarif_eksternal <= 0) $errors[] = "Tarif eksternal harus lebih dari 0 jika berbayar";
+        if ($tarif_internal <= 0) $errors[] = "Tarif internal harus lebih dari 0";
+        if ($tarif_eksternal <= 0) $errors[] = "Tarif eksternal harus lebih dari 0";
     }
 
-    // --- Handle image upload (Fokus Perbaikan di sini) ---
-    $gambar_name = $ruangan_data['gambar']; // Default: pertahankan gambar lama
-    $upload_path = '';
-    
+    // Upload gambar
+    $gambar_name = $ruangan_data['gambar'];
+    $upload_dir = 'assets/images/';
     if (isset($_FILES['gambar']) && $_FILES['gambar']['error'] == 0) {
         $allowed_types = ['image/jpeg', 'image/png', 'image/jpg'];
-        $max_size = 2 * 1024 * 1024; // 2MB
-        $upload_dir = 'assets/images/';
-        
+        $max_size = 2 * 1024 * 1024;
+
         if (!in_array($_FILES['gambar']['type'], $allowed_types)) {
             $errors[] = "Format gambar harus JPG, JPEG, atau PNG";
         } elseif ($_FILES['gambar']['size'] > $max_size) {
             $errors[] = "Ukuran gambar maksimal 2MB";
         } else {
-            // Proses upload gambar baru
             $file_ext = pathinfo($_FILES['gambar']['name'], PATHINFO_EXTENSION);
             $gambar_name_new = 'room_' . $ruangan_id . '_' . time() . '.' . $file_ext;
             $upload_path = $upload_dir . $gambar_name_new;
-            
+
             if (move_uploaded_file($_FILES['gambar']['tmp_name'], $upload_path)) {
-                // Hapus gambar lama jika ada dan berhasil upload gambar baru
                 if (!empty($ruangan_data['gambar']) && file_exists($upload_dir . $ruangan_data['gambar'])) {
-                     unlink($upload_dir . $ruangan_data['gambar']);
+                    unlink($upload_dir . $ruangan_data['gambar']);
                 }
-                $gambar_name = $gambar_name_new; // Set nama gambar baru
+                $gambar_name = $gambar_name_new;
             } else {
                 $errors[] = "Gagal mengupload gambar baru";
             }
         }
     }
-    
-    // Jika ada error, tampilkan error dan isi form dengan data POST yang gagal
+
     if (!empty($errors)) {
         $error_message = implode("<br>", $errors);
-        // Fallback data form yang sudah diisi
         $ruangan_data = array_merge($ruangan_data, [
             'nama' => $nama_ruang,
             'kapasitas' => $kapasitas,
@@ -100,44 +86,32 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             'tarif_internal' => $tarif_internal,
             'tarif_eksternal' => $tarif_eksternal,
             'keterangan' => $keterangan,
-            'gambar' => $gambar_name // Gunakan gambar name yang dipertahankan/baru
+            'gambar' => $gambar_name
         ]);
     } else {
-        try {
-            // Prepare update query
-            $update_fields = "nama = :nama, kapasitas = :kapasitas, lokasi = :lokasi, 
-                              tarif_internal = :tarif_internal, tarif_eksternal = :tarif_eksternal, 
-                              keterangan = :keterangan, updated_at = NOW()";
-            
-            if (isset($gambar_name) && !empty($gambar_name)) {
-                $update_fields .= ", gambar = :gambar";
-            }
-            
-            $db->query("UPDATE ruangan_multiguna SET $update_fields WHERE id = :id");
-            $db->bind(':nama', $nama_ruang);
-            $db->bind(':kapasitas', $kapasitas);
-            $db->bind(':lokasi', $lokasi);
-            $db->bind(':tarif_internal', $tarif_internal);
-            $db->bind(':tarif_eksternal', $tarif_eksternal);
-            $db->bind(':keterangan', $keterangan);
-            $db->bind(':id', $ruangan_id);
-            
-            if (isset($gambar_name) && !empty($gambar_name)) {
-                $db->bind(':gambar', $gambar_name);
-            }
-            
-            if ($db->execute()) {
-                header("Location: dataruangmultiguna_admin.php?status=success_edit");
-                exit;
-            } else {
-                $error_message = "Gagal memperbarui data ruangan";
-            }
-        } catch (Exception $e) {
-            $error_message = "Terjadi kesalahan: " . $e->getMessage();
+        // --- Update Data ---
+        if (!empty($gambar_name)) {
+            $stmt = $db->prepare("UPDATE tbl_ruangmultiguna
+                SET nama=?, kapasitas=?, lokasi=?, tarif_internal=?, tarif_eksternal=?, keterangan=?, gambar=?, updated_at=NOW() 
+                WHERE id=?");
+            $stmt->bind_param("sssdsssi", $nama_ruang, $kapasitas, $lokasi, $tarif_internal, $tarif_eksternal, $keterangan, $gambar_name, $ruangan_id);
+        } else {
+            $stmt = $db->prepare("UPDATE tbl_ruangmultiguna
+                SET nama=?, kapasitas=?, lokasi=?, tarif_internal=?, tarif_eksternal=?, keterangan=?, updated_at=NOW() 
+                WHERE id=?");
+            $stmt->bind_param("sssdssi", $nama_ruang, $kapasitas, $lokasi, $tarif_internal, $tarif_eksternal, $keterangan, $ruangan_id);
+        }
+
+        if ($stmt->execute()) {
+            header("Location: dataruangmultiguna_admin.php?status=success_edit");
+            exit;
+        } else {
+            $error_message = "Gagal memperbarui data ruangan.";
         }
     }
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -314,9 +288,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-200">
                 <a href="dataruangmultiguna_admin.php" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold px-6 py-3 rounded-lg shadow transition-colors"
-   onclick="confirmCancel(event);">
-    Batal
-</a>
+                onclick="confirmCancel(event);">
+                    Batal
+                </a>
 
                 <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-semibold px-6 py-3 rounded-lg shadow transition-colors">
                     Simpan Perubahan

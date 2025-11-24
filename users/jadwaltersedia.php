@@ -1,5 +1,5 @@
 <?php
-include 'koneksi.php';
+require_once '../koneksi.php';
 
 // ================= DATA MENU =================
 $menu_items = [
@@ -58,51 +58,81 @@ function renderMenu($items, $prefix = 'root') {
 }
 
 // ================== TARIK DATA DARI DATABASE ==================
-$filter = $_GET['filter'] ?? '';
+// ================== MAP TABEL SESUAI DATABASE ==================
 $tabel_map = [
-    'Ruang Multiguna' => 'ruanganmultiguna',
-    'Fasilitas' => 'fasilitas',
-    'Usaha' => 'usaha',
-    'Lab FTEN' => 'labften',
-    'Lab FKET' => 'labfket',
-    'Lab FTIK' => 'labftik',
-    'Lab FTBE' => 'labftbe'
+    'Ruang Multiguna' => 'tbl_ruangmultiguna',
+    'Fasilitas'       => 'tbl_fasilitas',
+    'Usaha'           => 'tbl_usaha',
+    'Lab FTBE'        => 'labftbe',
+    'Lab FTIK'        => 'labftik',
+    'Lab FKET'        => 'labfket',
+    'Lab FTEN'        => 'labften'
 ];
 
+// Ambil filter dari URL
+$filter = $_GET['filter'] ?? '';
+
 $results = [];
-$show_capacity = false;
+$counter = 1;
 
+// ================== CEK FILTER KHUSUS ==================
 if ($filter && isset($tabel_map[$filter])) {
-    $tabel = $tabel_map[$filter];
-    $check = mysqli_query($koneksi, "SHOW COLUMNS FROM `$tabel` LIKE 'kapasitas'");
-    $show_capacity = mysqli_num_rows($check) > 0;
 
-    $query = $show_capacity ? 
-        "SELECT no, nama, kapasitas, status FROM `$tabel`" : 
-        "SELECT no, nama, status FROM `$tabel`";
+    $tabel = $tabel_map[$filter];
+
+    // Cegah error kalau tabel tidak ada
+    $cek_tabel = mysqli_query($koneksi, "SHOW TABLES LIKE '$tabel'");
+    if (mysqli_num_rows($cek_tabel) == 0) {
+        echo "<p style='color:red'>Error: Tabel <b>$tabel</b> tidak ditemukan di database.</p>";
+        exit;
+    }
+
+    // Cek apakah kolom kapasitas ada
+    $cek_kapasitas = mysqli_query($koneksi, "SHOW COLUMNS FROM `$tabel` LIKE 'kapasitas'");
+    $show_capacity = mysqli_num_rows($cek_kapasitas) > 0;
+
+    // Query sesuai ada/tidaknya kolom kapasitas
+    $query = $show_capacity 
+        ? "SELECT id, nama, kapasitas, status FROM `$tabel`"
+        : "SELECT id, nama, status FROM `$tabel`";
+
     $res = mysqli_query($koneksi, $query);
+
     while ($row = mysqli_fetch_assoc($res)) {
+        $row['no'] = $counter++;
+        $row['tabel'] = $tabel;  // supaya tau asal tabel
         $results[] = $row;
     }
-} else {
-    foreach ($tabel_map as $tbl) {
-        $check = mysqli_query($koneksi, "SHOW COLUMNS FROM `$tbl` LIKE 'kapasitas'");
-        $show_capacity = mysqli_num_rows($check) > 0;
 
-        $query = $show_capacity ? 
-            "SELECT no, nama, kapasitas, status FROM `$tbl`" : 
-            "SELECT no, nama, status FROM `$tbl`";
+} else {
+
+    // ================== TANPA FILTER → TARIK SEMUA TABEL ==================
+    foreach ($tabel_map as $tbl) {
+
+        // Lewati jika tabel tidak ada
+        $cek_tabel = mysqli_query($koneksi, "SHOW TABLES LIKE '$tbl'");
+        if (mysqli_num_rows($cek_tabel) == 0) {
+            continue; // skip tabel hilang
+        }
+
+        // Cek kapasitas
+        $cek_kapasitas = mysqli_query($koneksi, "SHOW COLUMNS FROM `$tbl` LIKE 'kapasitas'");
+        $show_capacity = mysqli_num_rows($cek_kapasitas) > 0;
+
+        $query = $show_capacity 
+            ? "SELECT id, nama, kapasitas, status FROM `$tbl`"
+            : "SELECT id, nama, status FROM `$tbl`";
+
         $res = mysqli_query($koneksi, $query);
+
         while ($row = mysqli_fetch_assoc($res)) {
+            $row['no'] = $counter++;
+            $row['tabel'] = $tbl;
             $results[] = $row;
         }
     }
-    $counter = 1;
-    foreach ($results as &$row) {
-        $row['no'] = $counter++;
-    }
-    unset($row); 
 }
+
 ?>
 
 <!DOCTYPE html>

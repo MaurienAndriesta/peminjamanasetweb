@@ -1,8 +1,13 @@
 <?php
 // ... (Bagian PHP tetap sama) ...
 session_start();
+<<<<<<< HEAD
 require_once 'config/database.php';
 $db = new Database();
+=======
+require_once '../koneksi.php';
+$db = $koneksi;
+>>>>>>> bce18e6addb84d4411ecb401bfb0a22c57066df4
 
 // ====== Simulasi nama admin ======
 if (!isset($_SESSION['nama_admin'])) {
@@ -213,7 +218,7 @@ include 'sidebar_admin.php';
                 👤 <span class="hidden sm:inline"><?= htmlspecialchars($nama_admin) ?></span> ⏷
                 <div class="profile-dropdown hidden absolute right-0 top-10 bg-white rounded-xl shadow-lg overflow-hidden z-50 w-44 border border-gray-200">
                     <a href="profil_admin.php" class="block px-4 py-2 text-gray-800 text-sm border-b border-gray-100 hover:bg-amber-50 hover:text-dark-accent">👤 Profil Saya</a>
-                    <a href="#" onclick="logoutAdmin()" class="block px-4 py-2 text-gray-800 text-sm hover:bg-red-50 hover:text-red-700">🚪 Keluar</a>
+                    <a href="../halamanutama.php" onclick="logoutAdmin()" class="block px-4 py-2 text-gray-800 text-sm hover:bg-red-50 hover:text-red-700">🚪 Keluar</a>
                 </div>
             </div>
         </div>
@@ -386,8 +391,8 @@ function markAsRead(id){
 // Logout
 function logoutAdmin(){
     if(confirm("Yakin ingin keluar?")){
-        // Ganti index.php dengan path halaman login yang benar
-        window.location.href='index.php'; 
+        // Arahkan ke halaman utama user
+        window.location.href = '../halamanutama.php';
     }
 }
 

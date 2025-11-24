@@ -1,6 +1,6 @@
 <?php
-require_once 'config/database.php';
-$db = new Database();
+require_once '../koneksi.php';
+$db = $koneksi;
 
 if (!isset($_GET['id'])) {
     die("ID tidak ditemukan.");

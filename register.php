@@ -11,8 +11,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
 
     if (!empty($name) && !empty($email) && !empty($password)) {
-        // Cek apakah email sudah terdaftar
-        $check = $koneksi->prepare("SELECT id FROM users WHERE email = ?");
+        // 🔹 Cek apakah email sudah terdaftar
+        $check = $koneksi->prepare("SELECT id FROM tbl_user WHERE email = ?");
         $check->bind_param("s", $email);
         $check->execute();
         $result = $check->get_result();
@@ -20,25 +20,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($result->num_rows > 0) {
             $error = "Email sudah terdaftar!";
         } else {
-            // Simpan user baru
+            // 🔹 Simpan user baru ke tbl_user
             $hashed = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = $koneksi->prepare("INSERT INTO users (fullname, email, password) VALUES (?, ?, ?)");
-            $stmt->bind_param("sss", $name, $email, $hashed);
+            $role = "user"; // default role
+
+            $stmt = $koneksi->prepare("INSERT INTO tbl_user (fullname, email, password, role) VALUES (?, ?, ?, ?)");
+            $stmt->bind_param("ssss", $name, $email, $hashed, $role);
 
             if ($stmt->execute()) {
-                $success = "Registrasi berhasil! Silakan login.";
+                $success = "✅ Registrasi berhasil! Silakan login.";
             } else {
-                $error = "Terjadi kesalahan saat menyimpan data!";
+                $error = "❌ Terjadi kesalahan saat menyimpan data!";
             }
 
             $stmt->close();
         }
         $check->close();
     } else {
-        $error = "Semua field wajib diisi!";
+        $error = "⚠️ Semua field wajib diisi!";
     }
 }
 ?>
+
 
 
 <!DOCTYPE html>
