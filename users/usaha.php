@@ -1,5 +1,5 @@
 <?php
-include 'koneksi.php';
+require_once '../koneksi.php';
 
 // ================= DATA MENU =================
 $menu_items = [
@@ -28,16 +28,19 @@ $menu_items = [
     ['title' => 'Riwayat Peminjaman', 'url'  => 'riwayat.php'],
 ];
 
-// ================= AMBIL DATA RUANGAN =================
+// ================= AMBIL DATA USAHA =================
 $data = [];
-$result = $koneksi->query("SELECT * FROM usaha ORDER BY id ASC");
+$result = $koneksi->query("SELECT * FROM tbl_usaha ORDER BY id ASC");
 if ($result && $result->num_rows > 0) {
     while ($row = $result->fetch_assoc()) {
         $data[] = $row;
     }
 }
 
-// ================= FUNGSI RENDER MENU =================
+
+
+
+// ================= FUNGSI MENU =================
 function renderMenu($items, $prefix = 'root') {
     echo "<ul class='list-none pl-3 space-y-1'>";
     foreach ($items as $index => $item) {
@@ -70,55 +73,17 @@ function renderMenu($items, $prefix = 'root') {
   <title>Daftar Usaha</title>
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Konfigurasi Tailwind agar default font = Inter -->
   <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', 'ui-sans-serif', 'system-ui']
-          }
-        }
-      }
-    }
+    tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] } } } };
   </script>
-
-  <style>
-    /* Terapkan font Inter secara global */
-    body {
-      font-family: 'Inter', sans-serif;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
-
-    /*  Efek kaca lembut */
-    .glass-effect {
-      background: rgba(255, 255, 255, 0.95);
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.3);
-    }
-
-    /* Animasi fade-in */
-    .fade-in {
-      animation: fadeIn 0.5s ease-in-out;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-  </style>
 </head>
 
 <body class="bg-gradient-to-br from-[#D1E5EA] to-white min-h-screen font-sans text-gray-800">
 
 <!-- Navbar -->
 <nav class="fixed top-0 left-0 right-0 bg-[#D1E5EA]/90 backdrop-blur-md shadow-md h-16 z-50 flex items-center gap-4 px-6 transition-all">
-  <button id="hamburgerBtn" onclick="toggleSidebar()" 
-    class="bg-gray-800 text-white p-3 rounded-md">☰</button>
+  <button id="hamburgerBtn" onclick="toggleSidebar()" class="bg-gray-800 text-white p-3 rounded-md">☰</button>
 
   <form class="flex-1">
     <input id="searchInput" type="text" placeholder="Cari Usaha..." 
@@ -140,50 +105,60 @@ function renderMenu($items, $prefix = 'root') {
 </div>
 
 <!-- Main -->
-<main class="pt-24 px-6 max-w-7xl mx-auto fade-in">
+<main class="pt-24 px-6 max-w-[90rem] mx-auto fade-in w-full">
   <h2 class="text-2xl font-bold text-gray-700 mb-6 border-l-4 border-blue-400 pl-3">
     Daftar Usaha
   </h2>
 
-  <div class="bg-white border border-blue-200 rounded-2xl shadow-lg overflow-hidden transition-all">
-    <table class="w-full text-sm" id="ruanganTable">
+  <div class="bg-white border border-blue-200 rounded-2xl shadow-lg overflow-x-auto transition-all w-full">
+    <table class="min-w-full text-sm" id="ruanganTable">
       <thead>
         <tr class="bg-[#E3F2F7] text-gray-700 uppercase text-xs tracking-wider">
-          <th class="border border-gray-200 px-4 py-3 text-left">No</th>
-          <th class="border border-gray-200 px-4 py-3 text-left">Foto</th>
-          <th class="border border-gray-200 px-4 py-3 text-left">Nama </th>
-          <th class="border border-gray-200 px-4 py-3 text-left">Kapasitas</th>
-        
-          <th class="border border-gray-200 px-4 py-3 text-left">Eksternal ITPLN</th>
-          <th class="border border-gray-200 px-4 py-3 text-left">Keterangan</th>
+          <th class="border border-gray-200 px-5 py-3 text-left">No</th>
+          <th class="border border-gray-200 px-5 py-3 text-left">Foto</th>
+          <th class="border border-gray-200 px-5 py-3 text-left">Nama Usaha</th>
+          <th class="border border-gray-200 px-5 py-3 text-left">Kapasitas</th>
+          <th class="border border-gray-200 px-5 py-3 text-left">Eksternal ITPLN</th>
+          <th class="border border-gray-200 px-5 py-3 text-left">Keterangan</th>
         </tr>
       </thead>
+
       <tbody>
-        <?php foreach($data as $row): ?>
+        <?php foreach($data as $index => $row): ?>
         <tr class="hover:bg-blue-50 transition duration-200">
-          <td class="border border-gray-200 px-4 py-3"><?= $row['no'] ?></td>
-          <td class="border border-gray-200 px-4 py-3 text-center">
-            <?php if (!empty($row['foto'])): ?>
+          <td class="border border-gray-200 px-5 py-3"><?= $index + 1 ?></td>
+
+          <td class="border border-gray-200 px-5 py-3 text-center">
+            <?php if (!empty($row['gambar'])): ?>
               <div class="flex flex-col items-center space-y-2">
-                <img src="uploads/ruangan/<?= htmlspecialchars($row['foto']); ?>" 
-                     alt="Foto <?= htmlspecialchars($row['nama']); ?>" 
-                     class="w-24 h-20 object-cover rounded-lg shadow-md hover:scale-105 hover:shadow-lg transition-all duration-300 cursor-pointer"
-                     onclick="showImageModal('uploads/ruangan/<?= htmlspecialchars($row['foto']); ?>')">
-                <button onclick="showImageModal('uploads/ruangan/<?= htmlspecialchars($row['foto']); ?>')" 
-                        class="text-blue-600 text-xs hover:underline transition">Lihat Foto</button>
+                <img src="uploads/ruangan/<?= htmlspecialchars($row['gambar']); ?>" 
+                     class="w-28 h-24 object-cover rounded-xl shadow-md hover:scale-105 transition-all cursor-pointer"
+                     onclick="showImageModal('uploads/ruangan/<?= htmlspecialchars($row['gambar']); ?>')">
+                <button onclick="showImageModal('uploads/ruangan/<?= htmlspecialchars($row['gambar']); ?>')" 
+                        class="text-blue-600 text-xs hover:underline">Lihat Foto</button>
               </div>
             <?php else: ?>
               <span class="text-gray-400 italic">Tidak ada foto</span>
             <?php endif; ?>
           </td>
-          <td class="border border-gray-200 px-4 py-3"><?= $row['nama'] ?></td>
-          <td class="border border-gray-200 px-4 py-3"><?= $row['kapasitas'] ?></td>
 
-          <td class="border border-gray-200 px-4 py-3"><?= $row['eksternal_itpln'] ?></td>
-          <td class="border border-gray-200 px-4 py-3"><?= $row['keterangan'] ?></td>
+          <td class="border border-gray-200 px-5 py-3 font-medium text-gray-800">
+            <?= htmlspecialchars($row['nama']) ?>
+          </td>
+
+          <td class="border border-gray-200 px-5 py-3">
+            <?= htmlspecialchars($row['kapasitas']) ?: '-' ?>
+          </td>
+
+          <td class="border border-gray-200 px-5 py-3 text-blue-700 font-semibold">
+            Rp <?= number_format($row['tarif_eksternal'], 0, ',', '.') ?>/tahun
+          </td>
+
+          <td class="border border-gray-200 px-5 py-3">
+            <?= htmlspecialchars($row['keterangan']) ?>
+          </td>
         </tr>
         <?php endforeach; ?>
-       
       </tbody>
     </table>
   </div>
@@ -191,8 +166,9 @@ function renderMenu($items, $prefix = 'root') {
   <!-- Modal Foto -->
   <div id="imageModal" class="fixed inset-0 bg-black/70 flex items-center justify-center hidden z-50">
     <div class="relative max-w-4xl fade-in">
-      <img id="modalImage" src="" alt="Foto Ruangan" class="rounded-2xl shadow-2xl max-h-[90vh] border-4 border-white transition-all">
-      <button onclick="closeImageModal()" class="absolute -top-4 -right-4 bg-white rounded-full p-2 shadow hover:bg-gray-100 text-lg font-bold transition">✕</button>
+      <img id="modalImage" src="" class="rounded-2xl shadow-2xl max-h-[90vh] border-4 border-white">
+      <button onclick="closeImageModal()" 
+              class="absolute -top-4 -right-4 bg-white rounded-full p-2 shadow">✕</button>
     </div>
   </div>
 </main>
