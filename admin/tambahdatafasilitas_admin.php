@@ -1,40 +1,31 @@
 <?php
-// Include database configuration
-require_once 'config/database.php';
+require_once '../koneksi.php';
+$db = $koneksi;
 
-// Initialize database connection
-$db = new Database();
-
-// Initialize message variable
 $error_message = null;
 
-// Processing form submission
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nama_fasilitas = trim($_POST['nama_fasilitas'] ?? '');
-    $kapasitas = trim($_POST['kapasitas'] ?? '');
-    $lokasi = trim($_POST['lokasi'] ?? '');
+    $kapasitas = $_POST['kapasitas'] ?? '';
     $tipe_tarif = $_POST['tipe_tarif'] ?? 'berbayar';
     $periode = $_POST['periode'] ?? 'hari';
     $tarif_internal = (float)($_POST['tarif_internal'] ?? 0);
     $tarif_eksternal = (float)($_POST['tarif_eksternal'] ?? 0);
     $keterangan = trim($_POST['keterangan'] ?? '');
-    
-    // Validation
+
     $errors = [];
-    if (empty($nama_fasilitas)) $errors[] = "Nama fasilitas harus diisi";
-    if (empty($kapasitas)) $errors[] = "Kapasitas harus diisi";
-    if (empty($lokasi)) $errors[] = "Lokasi harus diisi";
-    
-    // Validasi tarif
-    if ($tipe_tarif === 'berbayar' && $tarif_internal <= 0) $errors[] = "Tarif internal harus lebih dari 0";
-    if ($tipe_tarif === 'berbayar' && $tarif_eksternal <= 0) $errors[] = "Tarif eksternal harus lebih dari 0";
-    
-    if (empty($keterangan)) $errors[] = "Keterangan harus diisi";
-    
-    // Handle image upload
-    $gambar_name = '';
+    if (!$nama_fasilitas) $errors[] = "Nama fasilitas harus diisi";
+    if (!$kapasitas) $errors[] = "Kapasitas harus dipilih";
+    if ($tipe_tarif === 'berbayar') {
+        if ($tarif_internal <= 0) $errors[] = "Tarif internal harus lebih dari 0";
+        if ($tarif_eksternal <= 0) $errors[] = "Tarif eksternal harus lebih dari 0";
+    }
+    if (!$keterangan) $errors[] = "Keterangan harus diisi";
+
+    // Upload Gambar (Opsional)
+    $gambar_name = null;
     $upload_path = '';
-    if (isset($_FILES['gambar']) && $_FILES['gambar']['error'] == 0) {
+    if (isset($_FILES['gambar']) && $_FILES['gambar']['error'] === 0) {
         $allowed_types = ['image/jpeg', 'image/png', 'image/jpg'];
         $max_size = 2 * 1024 * 1024; // 2MB
         $upload_dir = 'assets/images/';
@@ -44,63 +35,71 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         } elseif ($_FILES['gambar']['size'] > $max_size) {
             $errors[] = "Ukuran gambar maksimal 2MB";
         } else {
-            if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0755, true);
-            }
-            
+            if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
+
             $file_ext = pathinfo($_FILES['gambar']['name'], PATHINFO_EXTENSION);
             $gambar_name = 'fasilitas_' . time() . '_' . rand(1000, 9999) . '.' . $file_ext;
             $upload_path = $upload_dir . $gambar_name;
-            
+
             if (!move_uploaded_file($_FILES['gambar']['tmp_name'], $upload_path)) {
                 $errors[] = "Gagal mengupload gambar";
-                $gambar_name = '';
+                $gambar_name = null;
             }
         }
     }
-    
+
     if (empty($errors)) {
-        try {
-            // Set tarif ke 0 jika gratis
-            if ($tipe_tarif === 'gratis') {
-                $tarif_internal = 0;
-                $tarif_eksternal = 0;
-            }
-            
-            $db->query("INSERT INTO fasilitas (nama, kapasitas, lokasi, tarif_internal, tarif_eksternal, keterangan, gambar, status) 
-                        VALUES (:nama, :kapasitas, :lokasi, :tarif_internal, :tarif_eksternal, :keterangan, :gambar, 'aktif')");
-            
-            $db->bind(':nama', $nama_fasilitas);
-            $db->bind(':kapasitas', $kapasitas);
-            $db->bind(':lokasi', $lokasi);
-            $db->bind(':tarif_internal', $tarif_internal);
-            $db->bind(':tarif_eksternal', $tarif_eksternal);
-            $db->bind(':keterangan', $keterangan); 
-            $db->bind(':gambar', $gambar_name);
-            
-            if ($db->execute()) {
-                header('Location: datafasilitas_admin.php?status=success_add');
-                exit; 
-            } else {
-                $error_message = "Gagal menambahkan data fasilitas";
-                if (!empty($gambar_name) && file_exists($upload_path)) {
-                    unlink($upload_path);
-                }
-            }
-        } catch (Exception $e) {
-            $error_message = "Terjadi kesalahan: " . $e->getMessage();
-            if (!empty($gambar_name) && file_exists($upload_path)) {
-                unlink($upload_path);
-            }
+        if ($tipe_tarif === 'gratis') {
+            $tarif_internal = 0;
+            $tarif_eksternal = 0;
         }
+
+        // Internal & eksternal IT PLN sama dengan tarif
+        $internal_itpln = $tarif_internal;
+        $eksternal_itpln = $tarif_eksternal;
+
+        $stmt = $db->prepare("
+    INSERT INTO tbl_fasilitas 
+    (nama, kapasitas, tarif_internal, tarif_eksternal, keterangan, gambar, status) 
+    VALUES (?, ?, ?, ?, ?, ?, 'tersedia')
+");
+
+if (!$stmt) {
+    $error_message = "Prepare failed: " . $db->error;
+} else {
+    // bind_param: s=string, i=int, d=float
+    $stmt->bind_param(
+        "siddss",
+        $nama_fasilitas,   // string
+        $kapasitas,        // int
+        $tarif_internal,   // double
+        $tarif_eksternal,  // double
+        $keterangan,       // string
+        $gambar_name       // string
+    );
+
+    if ($stmt->execute()) {
+        header('Location: datafasilitas_admin.php?status=success_add');
+        exit;
+    } else {
+        $error_message = "Query failed: " . $stmt->error;
+        if ($gambar_name && file_exists($upload_path)) unlink($upload_path);
+    }
+
+    $stmt->close();
+}
+
     } else {
         $error_message = implode("<br>", $errors);
-        if (!empty($gambar_name) && file_exists($upload_path)) {
-            unlink($upload_path);
-        }
+        if ($gambar_name && file_exists($upload_path)) unlink($upload_path);
     }
 }
 ?>
+
+
+
+
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -192,120 +191,119 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         </div>
 
         <form method="POST" enctype="multipart/form-data" id="tambahForm">
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10">
-                
-                <!-- Left Column -->
-                <div class="space-y-5">
-                    <div class="image-upload-area w-full h-48 sm:h-64 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center hover:border-amber-500 relative">
-                        <input type="file" id="fileInput" name="gambar" accept="image/*" onchange="previewImage(event)">
-                        
-                        <div class="text-center text-gray-500 upload-placeholder" id="uploadPlaceholder">
-                            <p class="font-semibold text-sm sm:text-base">📷 Klik untuk menambah gambar</p>
-                            <small class="text-xs">JPG, PNG maksimal 2MB (Opsional)</small>
-                        </div>
-                        <img id="previewImg" class="preview-image absolute inset-0" style="display: none;" alt="Preview">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="nama_fasilitas" class="block font-semibold mb-2 text-sm sm:text-base">Nama Fasilitas <span class="text-red-500">*</span></label>
-                        <input type="text" id="nama_fasilitas" name="nama_fasilitas" 
-                               class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm sm:text-base" 
-                               placeholder="Isi Nama Fasilitas" required 
-                               value="<?= htmlspecialchars($_POST['nama_fasilitas'] ?? '') ?>">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="kapasitas" class="block font-semibold mb-2 text-sm sm:text-base">Kapasitas <span class="text-red-500">*</span></label>
-                        <input type="text" id="kapasitas" name="kapasitas" 
-                               class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm sm:text-base" 
-                               placeholder="Isi Kapasitas" required
-                               value="<?= htmlspecialchars($_POST['kapasitas'] ?? '') ?>">
-                    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10">
+        <!-- Kolom Kiri -->
+        <div class="space-y-5">
+            <!-- Upload Gambar -->
+            <div class="image-upload-area w-full h-48 sm:h-64 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center hover:border-amber-500 relative">
+                <input type="file" id="fileInput" name="gambar" accept="image/*" onchange="previewImage(event)">
+                <div class="text-center text-gray-500 upload-placeholder" id="uploadPlaceholder">
+                    <p class="font-semibold text-sm sm:text-base">📷 Klik untuk menambah gambar</p>
+                    <small class="text-xs">JPG, PNG maksimal 2MB (Opsional)</small>
                 </div>
-
-                <!-- Right Column -->
-                <div class="space-y-5">
-                    <div class="form-group">
-                        <label for="lokasi" class="block font-semibold mb-2 text-sm sm:text-base">Lokasi <span class="text-red-500">*</span></label>
-                        <input type="text" id="lokasi" name="lokasi" 
-                               class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm sm:text-base" 
-                               placeholder="Isi Lokasi" required
-                               value="<?= htmlspecialchars($_POST['lokasi'] ?? '') ?>">
-                    </div>
-
-                    <div class="form-group">
-                        <label class="block font-semibold mb-2 text-sm sm:text-base">Tipe Tarif <span class="text-red-500">*</span></label>
-                        <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
-                            <div class="flex items-center gap-4 sm:gap-6">
-                                <label class="flex items-center gap-2 cursor-pointer text-sm sm:text-base">
-                                    <input type="radio" id="gratis" name="tipe_tarif" value="gratis" class="form-radio text-amber-500 h-4 w-4"
-                                           <?= (isset($_POST['tipe_tarif']) && $_POST['tipe_tarif'] === 'gratis') ? 'checked' : '' ?>>
-                                    Gratis
-                                </label>
-                                <label class="flex items-center gap-2 cursor-pointer text-sm sm:text-base">
-                                    <input type="radio" id="berbayar" name="tipe_tarif" value="berbayar" class="form-radio text-amber-500 h-4 w-4"
-                                           <?= (!isset($_POST['tipe_tarif']) || $_POST['tipe_tarif'] === 'berbayar') ? 'checked' : '' ?>>
-                                    Berbayar
-                                </label>
-                            </div>
-                            <div class="flex items-center gap-2 text-xs sm:text-sm text-gray-600 sm:border-l sm:pl-4">
-                                <label class="flex items-center gap-1 cursor-pointer">
-                                    <input type="radio" id="hari" name="periode" value="hari" class="form-radio text-amber-500 h-4 w-4" 
-                                        <?= (!isset($_POST['periode']) || $_POST['periode'] === 'hari') ? 'checked' : '' ?>> Hari
-                                </label>
-                                <span>/</span>
-                                <label class="flex items-center gap-1 cursor-pointer">
-                                    <input type="radio" id="jam" name="periode" value="jam" class="form-radio text-amber-500 h-4 w-4"
-                                        <?= (isset($_POST['periode']) && $_POST['periode'] === 'jam') ? 'checked' : '' ?>> Jam
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-group" id="tarifSection">
-                        <label class="block font-semibold mb-2 text-sm sm:text-base">Tarif Sewa Internal/Eksternal <span class="text-red-500">*</span></label>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <input type="number" name="tarif_internal" 
-                                       class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm sm:text-base" 
-                                       placeholder="Tarif Internal" required
-                                       value="<?= htmlspecialchars($_POST['tarif_internal'] ?? '') ?>">
-                                <div class="mt-2 text-xs sm:text-sm text-gray-600">
-                                    <span class="font-medium">Internal IT PLN</span>
-                                </div>
-                            </div>
-                            <div>
-                                <input type="number" name="tarif_eksternal" 
-                                       class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm sm:text-base" 
-                                       placeholder="Tarif Eksternal" required
-                                       value="<?= htmlspecialchars($_POST['tarif_eksternal'] ?? '') ?>">
-                                <div class="mt-2 text-xs sm:text-sm text-gray-600">
-                                    <span class="font-medium">Eksternal</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="keterangan" class="block font-semibold mb-2 text-sm sm:text-base">Keterangan <span class="text-red-500">*</span></label>
-                        <textarea id="keterangan" name="keterangan" rows="4" 
-                                 class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm sm:text-base" 
-                                 placeholder="Isi Keterangan" required><?= htmlspecialchars($_POST['keterangan'] ?? '') ?></textarea>
-                    </div>
-                </div>
+                <img id="previewImg" class="preview-image absolute inset-0" style="display: none;" alt="Preview">
             </div>
 
-            <div class="flex flex-col sm:flex-row justify-end gap-3 mt-6 sm:mt-8 pt-4 border-t border-gray-200">
-                <button type="button" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold px-4 sm:px-6 py-2 sm:py-3 rounded-lg shadow transition-colors text-sm sm:text-base order-2 sm:order-1" onclick="resetForm()">
-                    Batal
-                </button>
-                <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-gray-900 font-semibold px-4 sm:px-6 py-2 sm:py-3 rounded-lg shadow transition-colors text-sm sm:text-base order-1 sm:order-2">
-                    Tambah Data
-                </button>
+            <!-- Nama Fasilitas -->
+            <div class="form-group">
+                <label for="nama_fasilitas" class="block font-semibold mb-2 text-sm sm:text-base">Nama Fasilitas <span class="text-red-500">*</span></label>
+                <input type="text" id="nama_fasilitas" name="nama_fasilitas"
+                       class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm sm:text-base"
+                       placeholder="Isi Nama Fasilitas" required
+                       value="<?= htmlspecialchars($_POST['nama_fasilitas'] ?? '') ?>">
             </div>
-        </form>
-    </div>
+
+            <!-- Kapasitas -->
+            <div class="form-group">
+    <label for="kapasitas" class="block font-semibold mb-2">Kapasitas : <span class="text-red-500">*</span></label>
+    <select id="kapasitas" name="kapasitas" required
+        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500">
+        <option value="">-- Pilih Kapasitas --</option>
+        <option value="Dalam Kota" <?= ($fasilitas_data['kapasitas'] ?? '') == 'Dalam Kota' ? 'selected' : '' ?>>Dalam Kota</option>
+        <option value="Luar Kota" <?= ($fasilitas_data['kapasitas'] ?? '') == 'Luar Kota' ? 'selected' : '' ?>>Luar Kota</option>
+        <option value="Standar" <?= ($fasilitas_data['kapasitas'] ?? '') == 'Standar' ? 'selected' : '' ?>>Standar</option>
+    </select>
 </div>
+
+        </div>
+
+        <!-- Kolom Kanan -->
+        <div class="space-y-5">
+            <!-- Tipe Tarif -->
+            <div class="form-group">
+                <label class="block font-semibold mb-2 text-sm sm:text-base">Tipe Tarif <span class="text-red-500">*</span></label>
+                <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
+                    <div class="flex items-center gap-4 sm:gap-6">
+                        <label class="flex items-center gap-2 cursor-pointer text-sm sm:text-base">
+                            <input type="radio" id="gratis" name="tipe_tarif" value="gratis" class="form-radio text-amber-500 h-4 w-4"
+                                   <?= (isset($_POST['tipe_tarif']) && $_POST['tipe_tarif'] === 'gratis') ? 'checked' : '' ?>>
+                            Gratis
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer text-sm sm:text-base">
+                            <input type="radio" id="berbayar" name="tipe_tarif" value="berbayar" class="form-radio text-amber-500 h-4 w-4"
+                                   <?= (!isset($_POST['tipe_tarif']) || $_POST['tipe_tarif'] === 'berbayar') ? 'checked' : '' ?>>
+                            Berbayar
+                        </label>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs sm:text-sm text-gray-600 sm:border-l sm:pl-4">
+                        <label class="flex items-center gap-1 cursor-pointer">
+                            <input type="radio" id="hari" name="periode" value="hari" class="form-radio text-amber-500 h-4 w-4"
+                                   <?= (!isset($_POST['periode']) || $_POST['periode'] === 'hari') ? 'checked' : '' ?>> Hari
+                        </label>
+                        <span>/</span>
+                        <label class="flex items-center gap-1 cursor-pointer">
+                            <input type="radio" id="jam" name="periode" value="jam" class="form-radio text-amber-500 h-4 w-4"
+                                   <?= (isset($_POST['periode']) && $_POST['periode'] === 'jam') ? 'checked' : '' ?>> Jam
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tarif Sewa -->
+            <div class="form-group" id="tarifSection">
+                <label class="block font-semibold mb-2 text-sm sm:text-base">Tarif Sewa Internal/Eksternal <span class="text-red-500">*</span></label>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <input type="number" name="tarif_internal"
+                               class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm sm:text-base"
+                               placeholder="Tarif Internal" required
+                               value="<?= htmlspecialchars($_POST['tarif_internal'] ?? '') ?>">
+                        <div class="mt-1 text-xs sm:text-sm text-gray-600">
+                            <span class="font-medium">Internal IT PLN</span>
+                        </div>
+                    </div>
+                    <div>
+                        <input type="number" name="tarif_eksternal"
+                               class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm sm:text-base"
+                               placeholder="Tarif Eksternal" required
+                               value="<?= htmlspecialchars($_POST['tarif_eksternal'] ?? '') ?>">
+                        <div class="mt-1 text-xs sm:text-sm text-gray-600">
+                            <span class="font-medium">Eksternal</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Keterangan -->
+            <div class="form-group">
+                <label for="keterangan" class="block font-semibold mb-2 text-sm sm:text-base">Keterangan <span class="text-red-500">*</span></label>
+                <textarea id="keterangan" name="keterangan" rows="4"
+                          class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm sm:text-base"
+                          placeholder="Isi Keterangan" required><?= htmlspecialchars($_POST['keterangan'] ?? '') ?></textarea>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex flex-col sm:flex-row justify-end gap-3 mt-6 sm:mt-8 pt-4 border-t border-gray-200">
+        <button type="button" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold px-4 sm:px-6 py-2 sm:py-3 rounded-lg shadow transition-colors text-sm sm:text-base order-2 sm:order-1" onclick="resetForm()">
+            Batal
+        </button>
+        <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-gray-900 font-semibold px-4 sm:px-6 py-2 sm:py-3 rounded-lg shadow transition-colors text-sm sm:text-base order-1 sm:order-2">
+            Tambah Data
+        </button>
+    </div>
+</form>
+
 
 <script>
 function toggleSidebar() {

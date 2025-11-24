@@ -1,44 +1,38 @@
 <?php
-// Include database configuration
-require_once 'config/database.php';
+require_once '../koneksi.php';
+$db = $koneksi;
 
-// Initialize database connection
-$db = new Database();
-
-// Initialize message variable
+// --- Inisialisasi pesan error ---
 $error_message = null;
 
-// Processing form submission
+// --- Proses form ---
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $nama = trim($_POST['nama'] ?? '');
     $kapasitas = trim($_POST['kapasitas'] ?? '');
     $lokasi = trim($_POST['lokasi'] ?? '');
     $fakultas = $_POST['fakultas'] ?? '';
-    $status = $_POST['status'] ?? 'aktif';
-    $keterangan = trim($_POST['keterangan'] ?? '');
+    $status = $_POST['status'] ?? 'tersedia';
     $tarif_laboratorium = trim($_POST['tarif_laboratorium'] ?? '');
     $tarif_peralatan = trim($_POST['tarif_peralatan'] ?? '');
-    $satuan_laboratorium = $_POST['satuan_laboratorium'] ?? '';
-    $satuan_peralatan = $_POST['satuan_peralatan'] ?? '';
+    
+    ;
 
-    // Validation
     $errors = [];
+
+    // --- Validasi dasar ---
     if (empty($nama)) $errors[] = "Nama laboratorium harus diisi";
     if (empty($kapasitas)) $errors[] = "Kapasitas harus diisi";
     if (empty($lokasi)) $errors[] = "Lokasi harus diisi";
     if (empty($fakultas)) $errors[] = "Fakultas harus dipilih";
-    if (empty($keterangan)) $errors[] = "Keterangan harus diisi";
-    if (empty($tarif_laboratorium) || (float)$tarif_laboratorium <= 0) $errors[] = "Tarif sewa laboratorium harus diisi dan lebih dari 0";
-    if (empty($tarif_peralatan) || (float)$tarif_peralatan <= 0) $errors[] = "Tarif sewa peralatan harus diisi dan lebih dari 0";
-    if (empty($satuan_laboratorium)) $errors[] = "Satuan tarif laboratorium harus dipilih";
-    if (empty($satuan_peralatan)) $errors[] = "Satuan tarif peralatan harus dipilih";
+    if (empty($tarif_laboratorium) || (float)$tarif_laboratorium <= 0) $errors[] = "Tarif laboratorium harus diisi dan lebih dari 0";
+    if (empty($tarif_peralatan) || (float)$tarif_peralatan <= 0) $errors[] = "Tarif peralatan harus diisi dan lebih dari 0";
 
-    // Handle image upload
+    // --- Upload Gambar ---
     $gambar_name = '';
     $upload_path = '';
     if (isset($_FILES['gambar']) && $_FILES['gambar']['error'] == 0) {
         $allowed_types = ['image/jpeg', 'image/png', 'image/jpg'];
-        $max_size = 2 * 1024 * 1024; // 2MB
+        $max_size = 2 * 1024 * 1024;
         $upload_dir = 'assets/images/';
 
         if (!in_array($_FILES['gambar']['type'], $allowed_types)) {
@@ -46,83 +40,72 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         } elseif ($_FILES['gambar']['size'] > $max_size) {
             $errors[] = "Ukuran gambar maksimal 2MB";
         } else {
-            if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0755, true);
-            }
+            if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
 
             $file_ext = pathinfo($_FILES['gambar']['name'], PATHINFO_EXTENSION);
-            $gambar_name = 'laboratorium_' . time() . '_' . rand(1000, 9999) . '.' . $file_ext;
+            $gambar_name = 'lab_' . time() . '_' . rand(1000, 9999) . '.' . $file_ext;
             $upload_path = $upload_dir . $gambar_name;
 
             if (!move_uploaded_file($_FILES['gambar']['tmp_name'], $upload_path)) {
-                $errors[] = "Gagal mengupload gambar";
+                $errors[] = "Gagal upload gambar";
                 $gambar_name = '';
             }
         }
     }
 
+    // --- Jika tidak ada error ---
     if (empty($errors)) {
-        try {
-            // Logika CREATE TABLE di PHP seharusnya hanya dijalankan sekali di awal setup,
-            // tapi saya pertahankan di sini seperti kode asli Anda (dengan asumsi tabel belum ada).
-            $db->query("CREATE TABLE IF NOT EXISTS `laboratorium` (
-                `id` int(11) NOT NULL AUTO_INCREMENT,
-                `nama` varchar(255) NOT NULL,
-                `kapasitas` varchar(100) NOT NULL,
-                `lokasi` varchar(100) NOT NULL,
-                `fakultas` varchar(50) NOT NULL,
-                `keterangan` text,
-                `gambar` varchar(255) DEFAULT NULL,
-                `tarif_laboratorium` decimal(10,2) DEFAULT NULL,
-                `satuan_laboratorium` enum('jam','hari') DEFAULT 'hari',
-                `tarif_peralatan` decimal(10,2) DEFAULT NULL,
-                `satuan_peralatan` enum('jam','hari') DEFAULT 'hari',
-                `status` enum('aktif','tidak_aktif') DEFAULT 'aktif',
-                `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                PRIMARY KEY (`id`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-            $db->execute();
+        // Tentukan tabel sesuai fakultas
+        switch ($fakultas) {
+            case 'FTBE': $tabel = 'labftbe'; break;
+            case 'FTEN': $tabel = 'labften'; break;
+            case 'FTIK': $tabel = 'labftik'; break;
+            case 'FKET': $tabel = 'labfket'; break;
+            default:
+                $error_message = "Fakultas tidak valid.";
+                $tabel = null;
+        }
 
+        if ($tabel) {
+            // --- Siapkan query ---
+            $sql = "INSERT INTO $tabel 
+        (nama, kapasitas, lokasi, foto,
+         tarif_sewa_laboratorium, tarif_sewa_peralatan, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)";
+           $stmt = $db->prepare($sql);
 
-            $db->query("INSERT INTO laboratorium (nama, kapasitas, lokasi, fakultas, keterangan, gambar, tarif_laboratorium, satuan_laboratorium, tarif_peralatan, satuan_peralatan, status) 
-                        VALUES (:nama, :kapasitas, :lokasi, :fakultas, :keterangan, :gambar, :tarif_laboratorium, :satuan_laboratorium, :tarif_peralatan, :satuan_peralatan, :status)");
+    if ($stmt) {
+    $stmt->bind_param(
+        "ssssdds",
+        $nama,
+        $kapasitas,
+        $lokasi,
+        $gambar_name,
+        $tarif_laboratorium,
+        $tarif_peralatan,
+        $status
+    );
 
-            $db->bind(':nama', $nama);
-            $db->bind(':kapasitas', $kapasitas);
-            $db->bind(':lokasi', $lokasi);
-            $db->bind(':fakultas', $fakultas);
-            $db->bind(':keterangan', $keterangan);
-            $db->bind(':gambar', $gambar_name);
-            $db->bind(':tarif_laboratorium', $tarif_laboratorium);
-            $db->bind(':satuan_laboratorium', $satuan_laboratorium);
-            $db->bind(':tarif_peralatan', $tarif_peralatan);
-            $db->bind(':satuan_peralatan', $satuan_peralatan);
-            $db->bind(':status', $status);
-
-            if ($db->execute()) {
-                header('Location: datalaboratorium_admin.php?status=success_add');
-                exit;
-            } else {
-                $error_message = "Gagal menambahkan data laboratorium";
-                if (!empty($gambar_name) && file_exists($upload_path)) {
-                    unlink($upload_path);
+                if ($stmt->execute()) {
+                    header("Location: datalaboratorium_admin.php?status=success_add");
+                    exit;
+                } else {
+                    $error_message = "Gagal menambahkan data laboratorium: " . $stmt->error;
+                    if ($gambar_name && file_exists($upload_path)) unlink($upload_path);
                 }
-            }
-        } catch (Exception $e) {
-            $error_message = "Terjadi kesalahan: " . $e->getMessage();
-            if (!empty($gambar_name) && file_exists($upload_path)) {
-                unlink($upload_path);
+
+                $stmt->close();
+            } else {
+                $error_message = "Kesalahan query: " . $db->error;
             }
         }
     } else {
         $error_message = implode("<br>", $errors);
-        if (!empty($gambar_name) && file_exists($upload_path)) {
-            unlink($upload_path);
-        }
+        if ($gambar_name && file_exists($upload_path)) unlink($upload_path);
     }
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -236,10 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                        placeholder="Isi Tarif Sewa Laboratorium" required min="0" step="0.01"
                                        value="<?= htmlspecialchars($_POST['tarif_laboratorium'] ?? '') ?>">
                             </div>
-                            <select id="satuan_laboratorium" name="satuan_laboratorium" class="form-input px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" required>
-                                <option value="jam" <?= (isset($_POST['satuan_laboratorium']) && $_POST['satuan_laboratorium'] === 'jam') ? 'selected' : '' ?>>/ Jam</option>
-                                <option value="hari" <?= (!isset($_POST['satuan_laboratorium']) || $_POST['satuan_laboratorium'] === 'hari') ? 'selected' : '' ?>>/ Hari</option>
-                            </select>
+                            
                         </div>
                     </div>
 
@@ -252,10 +232,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                        placeholder="Isi Tarif Sewa Peralatan" required min="0" step="0.01"
                                        value="<?= htmlspecialchars($_POST['tarif_peralatan'] ?? '') ?>">
                             </div>
-                            <select id="satuan_peralatan" name="satuan_peralatan" class="form-input px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" required>
-                                <option value="jam" <?= (isset($_POST['satuan_peralatan']) && $_POST['satuan_peralatan'] === 'jam') ? 'selected' : '' ?>>/ Jam</option>
-                                <option value="hari" <?= (!isset($_POST['satuan_peralatan']) || $_POST['satuan_peralatan'] === 'hari') ? 'selected' : '' ?>>/ Hari</option>
-                            </select>
+                            
                         </div>
                     </div>
                 </div>
@@ -296,16 +273,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <div class="form-group">
                         <label for="status" class="block font-semibold mb-2">Status : <span class="text-red-500">*</span></label>
                         <select id="status" name="status" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" required>
-                            <option value="aktif" <?= (!isset($_POST['status']) || $_POST['status'] === 'aktif') ? 'selected' : '' ?>>Aktif</option>
-                            <option value="tidak_aktif" <?= (isset($_POST['status']) && $_POST['status'] === 'tidak_aktif') ? 'selected' : '' ?>>Tidak Aktif</option>
+                            <option value="tersedia" <?= (!isset($_POST['status']) || $_POST['status'] === 'tersedia') ? 'selected' : '' ?>>Tersedia</option>
+                            <option value="tidak_tersedia" <?= (isset($_POST['status']) && $_POST['status'] === 'tidak_tersedia') ? 'selected' : '' ?>>Tidak Tersedia</option>
                         </select>
                     </div>
 
-                    <div class="form-group">
-                        <label for="keterangan" class="block font-semibold mb-2">Keterangan : <span class="text-red-500">*</span></label>
-                        <textarea id="keterangan" name="keterangan" rows="4" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
-                                 placeholder="Isi Keterangan" required><?= htmlspecialchars($_POST['keterangan'] ?? '') ?></textarea>
-                    </div>
+                    
                 </div>
             </div>
 
@@ -446,8 +419,7 @@ document.getElementById('tambahForm').addEventListener('submit', function(e) {
 
     const requiredFields = [
         'nama', 'kapasitas', 'lokasi', 'fakultas',
-        'keterangan', 'tarif_laboratorium', 'tarif_peralatan',
-        'satuan_laboratorium', 'satuan_peralatan'
+         'tarif_laboratorium', 'tarif_peralatan'
     ];
 
     requiredFields.forEach(field => {

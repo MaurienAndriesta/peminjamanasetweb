@@ -1,8 +1,11 @@
 <?php
-session_start();
-if (!isset($_SESSION['user'])) {
-    $_SESSION['user'] = "Nama Pengguna"; 
-}
+//session_start();
+//if (!isset($_SESSION['user'])) {
+    //header("Location: ../login.php");
+   // exit;
+//}
+
+//$fullname = $_SESSION['fullname']; // ini nama pengguna dari database
 
 $menu_items = [
     ['title' => 'Beranda', 'url' => 'dashboarduser.php'],
@@ -40,7 +43,7 @@ function renderMenu($items, $prefix = 'root') {
             <li>
                 <button onclick='toggleDropdown(\"{$uniqueId}\")'
                     class='flex justify-between items-center w-full px-3 py-2 text-left rounded-lg hover:bg-gray-700/70 transition'>
-                    <span>{$item['title']}</span>
+                    <span>{$item['title']}</span> 
                     <span id='icon-{$uniqueId}'>▼</span>
                 </button>
                 <div class='hidden pl-4 border-l border-gray-700 ml-2 mt-1' id='submenu-{$uniqueId}'>";
@@ -59,7 +62,7 @@ function renderMenu($items, $prefix = 'root') {
     echo "</ul>";
 }
 
-$user_name = $_SESSION['user'];
+//$user_name = $_SESSION['fullname'];
 $total_peminjaman_aktif = 12;
 $total_menunggu_persetujuan = 3;
 ?>
@@ -133,11 +136,11 @@ $total_menunggu_persetujuan = 3;
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
           </svg>
-          <?= htmlspecialchars($user_name); ?>
+          <?= htmlspecialchars($user_name); ?> 
         </button>
         <div id="userDropdown" 
              class="hidden absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden">
-          <a href="halamanutama.php" 
+          <a href="../halamanutama.php" 
              class="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-[#1E3A8A]/10 transition">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>

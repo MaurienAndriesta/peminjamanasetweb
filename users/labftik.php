@@ -1,5 +1,5 @@
 <?php
-include 'koneksi.php';
+require_once '../koneksi.php';
 
 // ================= DATA MENU =================
 $menu_items = [
@@ -152,7 +152,7 @@ function renderMenu($items, $prefix = 'root') {
           <th class="border border-gray-200 px-4 py-3 text-left">No</th>
           <th class="border border-gray-200 px-4 py-3 text-left">Foto</th>
           <th class="border border-gray-200 px-4 py-3 text-left">Nama Laboratorium</th>
-          <th class="border border-gray-200 px-4 py-3 text-left">Satuan</th>
+          
           <th class="border border-gray-200 px-4 py-3 text-left">Lokasi</th>
           <th class="border border-gray-200 px-4 py-3 text-left">Tarif Sewa Laboratorium</th>
           <th class="border border-gray-200 px-4 py-3 text-left">Tarif Sewa Peralatan</th>
@@ -161,7 +161,7 @@ function renderMenu($items, $prefix = 'root') {
       <tbody>
         <?php foreach($data as $row): ?>
         <tr class="hover:bg-blue-50 transition duration-200">
-          <td class="border border-gray-200 px-4 py-3"><?= $row['no'] ?></td>
+          <td class="border border-gray-200 px-4 py-3"><?= $row['id'] ?></td>
           <td class="border border-gray-200 px-4 py-3 text-center">
             <?php if (!empty($row['foto'])): ?>
               <div class="flex flex-col items-center space-y-2">
@@ -177,10 +177,14 @@ function renderMenu($items, $prefix = 'root') {
             <?php endif; ?>
           </td>
           <td class="border border-gray-200 px-4 py-3"><?= $row['nama'] ?></td>
-          <td class="border border-gray-200 px-4 py-3"><?= $row['satuan'] ?></td>
+          
           <td class="border border-gray-200 px-4 py-3"><?= $row['lokasi'] ?></td>
-          <td class="border border-gray-200 px-4 py-3"><?= $row['tarif_sewa_laboratorium'] ?></td>
-          <td class="border border-gray-200 px-4 py-3"><?= $row['tarif_sewa_peralatan'] ?></td>
+          <td class="border border-gray-200 px-4 py-3 text-green-700 font-semibold">
+              <?= 'Rp ' . number_format($row['tarif_sewa_laboratorium'], 0, ',', '.') . '/hari' ?>
+            </td>
+            <td class="border border-gray-200 px-4 py-3 text-blue-700 font-semibold">
+              <?= 'Rp ' . number_format($row['tarif_sewa_peralatan'], 0, ',', '.') . '/hari' ?>
+            </td>
         </tr>
         <?php endforeach; ?>
         <tr class="bg-blue-50">

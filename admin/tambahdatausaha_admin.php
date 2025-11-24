@@ -1,106 +1,92 @@
 <?php
-// Include database configuration
-require_once 'config/database.php';
+require_once '../koneksi.php';
+$db = $koneksi;
 
-// Initialize database connection
-$db = new Database();
-
-// Initialize message variable
+// ====== Inisialisasi ======
 $error_message = null;
+$periode = 'tahun'; // ✅ default biar tidak undefined
 
-// Processing form submission
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+// ====== Ambil data jika edit ======
+$usaha_detail = [];
+$is_edit = false;
+
+if (isset($_GET['id'])) {
+    $id = (int)$_GET['id'];
+    $stmt = $db->prepare("SELECT * FROM tbl_usaha WHERE id = ? LIMIT 1");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $usaha_detail = $result->fetch_assoc();
+    $stmt->close();
+
+    if ($usaha_detail) {
+        $is_edit = true;
+        $periode = $usaha_detail['periode'] ?? 'tahun';
+        
+    }
+}
+
+// ====== Form submission ======
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nama_usaha = trim($_POST['nama_usaha'] ?? '');
     $kapasitas = trim($_POST['kapasitas'] ?? '');
-    $lokasi = trim($_POST['lokasi'] ?? '');
     $tipe_tarif = $_POST['tipe_tarif'] ?? 'berbayar';
-    $periode = $_POST['periode'] ?? 'hari';
-    $tarif_internal = (float)($_POST['tarif_internal'] ?? 0);
+    $periode = $_POST['periode'] ?? 'tahun';
     $tarif_eksternal = (float)($_POST['tarif_eksternal'] ?? 0);
     $keterangan = trim($_POST['keterangan'] ?? '');
-    
-    // Validation
-    $errors = [];
-    if (empty($nama_usaha)) $errors[] = "Nama usaha harus diisi";
-    if (empty($kapasitas)) $errors[] = "Kapasitas harus diisi";
-    if (empty($lokasi)) $errors[] = "Lokasi harus diisi";
-    
-    // Validasi tarif
-    if ($tipe_tarif === 'berbayar' && $tarif_internal <= 0) $errors[] = "Tarif internal harus lebih dari 0";
-    if ($tipe_tarif === 'berbayar' && $tarif_eksternal <= 0) $errors[] = "Tarif eksternal harus lebih dari 0";
-    
-    if (empty($keterangan)) $errors[] = "Keterangan harus diisi";
-    
-    // Handle image upload
-    $gambar_name = '';
-    $upload_path = '';
-    if (isset($_FILES['gambar']) && $_FILES['gambar']['error'] == 0) {
-        $allowed_types = ['image/jpeg', 'image/png', 'image/jpg'];
-        $max_size = 2 * 1024 * 1024; // 2MB
-        $upload_dir = 'assets/images/';
 
-        if (!in_array($_FILES['gambar']['type'], $allowed_types)) {
-            $errors[] = "Format gambar harus JPG, JPEG, atau PNG";
-        } elseif ($_FILES['gambar']['size'] > $max_size) {
-            $errors[] = "Ukuran gambar maksimal 2MB";
-        } else {
-            if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0755, true);
-            }
-            
-            $file_ext = pathinfo($_FILES['gambar']['name'], PATHINFO_EXTENSION);
-            $gambar_name = 'usaha_' . time() . '_' . rand(1000, 9999) . '.' . $file_ext;
-            $upload_path = $upload_dir . $gambar_name;
-            
-            if (!move_uploaded_file($_FILES['gambar']['tmp_name'], $upload_path)) {
-                $errors[] = "Gagal mengupload gambar";
-                $gambar_name = '';
-            }
-        }
+    $errors = [];
+    if (!$nama_usaha) $errors[] = "Nama usaha harus diisi";
+    if (!$kapasitas) $errors[] = "Kapasitas harus diisi";
+    if ($tipe_tarif === 'berbayar' && $tarif_eksternal <= 0) $errors[] = "Tarif eksternal harus lebih dari 0";
+    if (!$keterangan) $errors[] = "Keterangan harus diisi";
+
+    // Upload gambar
+    $gambar_name = $usaha_detail['gambar'] ?? '';
+    if (isset($_FILES['gambar']) && $_FILES['gambar']['error'] === 0) {
+        $allowed_types = ['image/jpeg','image/jpg','image/png'];
+        $max_size = 2*1024*1024;
+        $upload_dir = 'assets/images/';
+        if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
+
+        $file = $_FILES['gambar'];
+        $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
+        $tmp_name = $file['tmp_name'];
+        $gambar_name = 'usaha_'.time().'_'.rand(1000,9999).'.'.$ext;
+        $upload_path = $upload_dir.$gambar_name;
+
+        if (!in_array($file['type'], $allowed_types)) $errors[] = "Format gambar harus JPG/JPEG/PNG";
+        elseif ($file['size'] > $max_size) $errors[] = "Ukuran gambar maksimal 2MB";
+        elseif (!move_uploaded_file($tmp_name, $upload_path)) $errors[] = "Gagal upload gambar";
     }
-    
+
     if (empty($errors)) {
-        try {
-            // Set tarif ke 0 jika gratis
-            if ($tipe_tarif === 'gratis') {
-                $tarif_internal = 0;
-                $tarif_eksternal = 0;
-            }
-            
-            $db->query("INSERT INTO usaha (nama, kapasitas, lokasi, tarif_internal, tarif_eksternal, keterangan, gambar, status) 
-                        VALUES (:nama, :kapasitas, :lokasi, :tarif_internal, :tarif_eksternal, :keterangan, :gambar, 'aktif')");
-            
-            $db->bind(':nama', $nama_usaha);
-            $db->bind(':kapasitas', $kapasitas);
-            $db->bind(':lokasi', $lokasi);
-            $db->bind(':tarif_internal', $tarif_internal);
-            $db->bind(':tarif_eksternal', $tarif_eksternal);
-            $db->bind(':keterangan', $keterangan); 
-            $db->bind(':gambar', $gambar_name);
-            
-            if ($db->execute()) {
-                header('Location: datausaha_admin.php?status=success_add');
-                exit; 
-            } else {
-                $error_message = "Gagal menambahkan data usaha";
-                if (!empty($gambar_name) && file_exists($upload_path)) {
-                    unlink($upload_path);
-                }
-            }
-        } catch (Exception $e) {
-            $error_message = "Terjadi kesalahan: " . $e->getMessage();
-            if (!empty($gambar_name) && file_exists($upload_path)) {
-                unlink($upload_path);
-            }
+        if ($tipe_tarif === 'gratis') $tarif_eksternal = 0;
+
+        if ($is_edit) {
+            $stmt = $db->prepare("UPDATE tbl_usaha SET nama=?, kapasitas=?, tarif_eksternal=?, keterangan=?, gambar=? WHERE id=?");
+            $stmt->bind_param("sisdssi", $nama_usaha, $kapasitas, $tarif_eksternal,  $keterangan, $gambar_name, $id);
+        } else {
+            $$status = 'tersedia';
+            $stmt = $db->prepare("INSERT INTO tbl_usaha (nama, kapasitas, tarif_eksternal, keterangan, gambar, status) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("sisdss", $nama_usaha, $kapasitas, $tarif_eksternal, $keterangan, $gambar_name, $status);
+
         }
+
+        if ($stmt->execute()) {
+            header('Location: datausaha_admin.php?status=success');
+            exit;
+        } else {
+            $error_message = "Gagal menyimpan data: ".$stmt->error;
+        }
+        $stmt->close();
     } else {
-        $error_message = implode("<br>", $errors);
-        if (!empty($gambar_name) && file_exists($upload_path)) {
-            unlink($upload_path);
-        }
+        $error_message = implode('<br>', $errors);
     }
 }
 ?>
+
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -204,12 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 </div>
 
                 <div class="space-y-6">
-                    <div class="form-group">
-                        <label for="lokasi" class="block font-semibold mb-2">Lokasi : <span class="text-red-500">*</span></label>
-                        <input type="text" id="lokasi" name="lokasi" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
-                               placeholder="Isi Lokasi" required
-                               value="<?= htmlspecialchars($_POST['lokasi'] ?? '') ?>">
-                    </div>
+                    
 
                     <div class="form-group">
                         <label class="block font-semibold mb-2">Tipe Tarif : <span class="text-red-500">*</span></label>
@@ -225,30 +206,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 Berbayar
                             </label>
                              <div class="flex items-center gap-2 text-sm text-gray-600 border-t sm:border-t-0 sm:border-l pt-2 sm:pt-0 pl-0 sm:pl-4 mt-2 sm:mt-0">
-                                <label class="flex items-center gap-1 cursor-pointer">
-                                    <input type="radio" id="hari" name="periode" value="hari" class="form-radio text-amber-500 h-4 w-4" 
-                                        <?= (!isset($_POST['periode']) || $_POST['periode'] === 'hari') ? 'checked' : '' ?>> Hari
-                                </label>
-                                <span>/</span>
-                                <label class="flex items-center gap-1 cursor-pointer">
-                                    <input type="radio" id="jam" name="periode" value="jam" class="form-radio text-amber-500 h-4 w-4"
-                                        <?= (isset($_POST['periode']) && $_POST['periode'] === 'jam') ? 'checked' : '' ?>> Jam
-                                </label>
-                            </div>
+                            <label class="flex items-center gap-1 cursor-pointer">
+                                <input type="radio" id="bulan" name="periode" value="bulan" class="form-radio text-amber-500 h-4 w-4" 
+                                    <?= (isset($_POST['periode']) && $_POST['periode'] === 'bulan' || $periode === 'bulan') ? 'checked' : '' ?>> Bulan
+                            </label>
+                            <span>/</span>
+                            <label class="flex items-center gap-1 cursor-pointer">
+                                <input type="radio" id="tahun" name="periode" value="tahun" class="form-radio text-amber-500 h-4 w-4"
+                                    <?= (!isset($_POST['periode']) || $_POST['periode'] === 'tahun' || $periode === 'tahun') ? 'checked' : '' ?>> Tahun
+                            </label>
+                        </div>
+
                         </div>
                     </div>
 
                     <div class="form-group" id="tarifSection">
-                        <label class="block font-semibold mb-2">Tarif Sewa Internal/Eksternal IT PLN : <span class="text-red-500">*</span></label>
+                        <label class="block font-semibold mb-2">Tarif Sewa Eksternal IT PLN : <span class="text-red-500">*</span></label>
                         <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <input type="number" name="tarif_internal" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
-                                       placeholder="Isi Tarif Internal" required
-                                       value="<?= htmlspecialchars($_POST['tarif_internal'] ?? '') ?>">
-                                <div class="flex items-center justify-start mt-2 text-sm text-gray-600">
-                                    <span class="font-medium">Internal</span>
-                                </div>
-                            </div>
                             <div>
                                 <input type="number" name="tarif_eksternal" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
                                        placeholder="Isi Tarif Eksternal" required
@@ -256,6 +230,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 <div class="flex items-center justify-start mt-2 text-sm text-gray-600">
                                     <span class="font-medium">Eksternal</span>
                                 </div>
+                            </div>
+                            <div>
+                                
                             </div>
                         </div>
                     </div>
@@ -279,6 +256,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         </form>
     </div>
 </div>
+
 
 <script>
 // PENTING: Fungsi toggleSidebar() harus sama persis dengan yang ada di sidebar_admin.php

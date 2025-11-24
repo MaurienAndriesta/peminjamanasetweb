@@ -1,9 +1,6 @@
 <?php
-// Include database configuration
-require_once 'config/database.php';
-
-// Initialize database connection
-$db = new Database();
+require_once '../koneksi.php';
+$db = $koneksi;
 
 // Get laboratorium ID dari URL parameter
 $laboratorium_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;

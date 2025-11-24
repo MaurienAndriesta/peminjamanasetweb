@@ -1,9 +1,6 @@
 <?php
-// Include database configuration
-require_once 'config/database.php';
-
-// Initialize database connection
-$db = new Database();
+require_once '../koneksi.php';
+$db = $koneksi;
 
 // Processing form submission
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
@@ -21,19 +18,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (empty($nama_ruang)) $errors[] = "Nama ruang harus diisi";
     if (empty($kapasitas)) $errors[] = "Kapasitas harus diisi";
     if (empty($lokasi)) $errors[] = "Lokasi harus diisi";
-    
-    // Jika tipe_tarif di-set ke gratis, override tarif menjadi 0
+    if (empty($keterangan)) $errors[] = "Keterangan harus diisi";
+
+    // Jika tipe tarif gratis, set tarif ke 0
     if ($tipe_tarif === 'gratis') {
         $tarif_internal = 0;
         $tarif_eksternal = 0;
     } else {
-        // Validasi tarif jika berbayar
         if ($tarif_internal <= 0) $errors[] = "Tarif internal harus lebih dari 0 jika berbayar";
         if ($tarif_eksternal <= 0) $errors[] = "Tarif eksternal harus lebih dari 0 jika berbayar";
     }
 
-    if (empty($keterangan)) $errors[] = "Keterangan harus diisi";
-    
     // Handle image upload
     $gambar_name = '';
     $upload_path = '';
@@ -61,40 +56,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
         }
     }
-    
+
+    // Jika tidak ada error, simpan ke database
     if (empty($errors)) {
-        try {
-            $db->query("INSERT INTO ruangan_multiguna (nama, kapasitas, lokasi, tarif_internal, tarif_eksternal, keterangan, gambar, status) 
-                        VALUES (:nama, :kapasitas, :lokasi, :tarif_internal, :tarif_eksternal, :keterangan, :gambar, 'aktif')");
-            
-            $db->bind(':nama', $nama_ruang);
-            $db->bind(':kapasitas', $kapasitas);
-            $db->bind(':lokasi', $lokasi);
-            $db->bind(':tarif_internal', $tarif_internal);
-            $db->bind(':tarif_eksternal', $tarif_eksternal);
-            $db->bind(':keterangan', $keterangan);
-            $db->bind(':gambar', $gambar_name);
-            
-            if ($db->execute()) {
-                header('Location: dataruangmultiguna_admin.php?status=success_add');
-                exit; 
-            } else {
-                $error_message = "Gagal menambahkan data ruangan";
-                if (!empty($gambar_name) && file_exists($upload_path)) {
-                    unlink($upload_path);
-                }
-            }
-        } catch (Exception $e) {
-            $error_message = "Terjadi kesalahan: " . $e->getMessage();
-            if (!empty($gambar_name) && file_exists($upload_path)) {
-                unlink($upload_path);
-            }
+        $stmt = $db->prepare("INSERT INTO tbl_ruangmultiguna (nama, kapasitas, lokasi, tarif_internal, tarif_eksternal, keterangan, gambar, status) 
+                              VALUES (?, ?, ?, ?, ?, ?, ?, 'tersedia')");
+        $stmt->bind_param("sssddss", $nama_ruang, $kapasitas, $lokasi, $tarif_internal, $tarif_eksternal, $keterangan, $gambar_name);
+
+        if ($stmt->execute()) {
+            header('Location: dataruangmultiguna_admin.php?status=success_add');
+            exit;
+        } else {
+            $error_message = "Gagal menambahkan data: " . $stmt->error;
+            if (!empty($gambar_name) && file_exists($upload_path)) unlink($upload_path);
         }
+        $stmt->close();
     } else {
         $error_message = implode("<br>", $errors);
-        if (!empty($gambar_name) && file_exists($upload_path)) {
-            unlink($upload_path);
-        }
+        if (!empty($gambar_name) && file_exists($upload_path)) unlink($upload_path);
     }
 }
 ?>
@@ -104,56 +83,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tambah Data Ruangan - Admin Pengelola</title>
-
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        body { 
-            font-family: 'Poppins', sans-serif; 
-        }
+        body { font-family: 'Poppins', sans-serif; }
         .text-dark-accent { color: #202938; }
-
-        /* Responsive Sidebar */
-        @media (min-width: 1024px) {
-            .main { margin-left: 4rem; }
-            .main.lg\:ml-60 { margin-left: 15rem; }
-        }
-
-        @media (max-width: 1023px) {
-            .main { margin-left: 0 !important; }
-        }
-
-        #toggleBtn {
-            position: relative;
-            z-index: 51 !important;
-        }
-
-        /* Image upload */
-        .image-upload-area {
-            position: relative;
-            cursor: pointer;
-            overflow: hidden;
-            transition: all .2s;
-        }
-        .image-upload-area input[type="file"] {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            opacity: 0;
-            cursor: pointer;
-            z-index: 10;
-        }
-        .preview-image {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            border-radius: 0.75rem;
-        }
-        .upload-placeholder {
-            transition: opacity .2s;
-            pointer-events: none;
-        }
+        @media (min-width: 1024px) {.main { margin-left: 4rem; } .main.lg\:ml-60 { margin-left: 15rem; }}
+        @media (max-width: 1023px) {.main { margin-left: 0 !important; }}
+        #toggleBtn { position: relative; z-index: 51 !important; }
+        .image-upload-area { position: relative; cursor: pointer; overflow: hidden; transition: all .2s; }
+        .image-upload-area input[type="file"] { position: absolute; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10; }
+        .preview-image { width: 100%; height: 100%; object-fit: cover; border-radius: 0.75rem; }
+        .upload-placeholder { transition: opacity .2s; pointer-events: none; }
     </style>
 </head>
 <body class="bg-blue-100 min-h-screen">
@@ -163,9 +105,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <div id="sidebarOverlay" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden lg:hidden"></div>
 
 <div id="mainContent" class="main flex-1 p-3 sm:p-5 transition-all duration-300 lg:ml-16 min-h-screen">
-    
+
     <div class="flex justify-between items-center mb-4 sm:mb-6">
-        <button id="toggleBtn" class="bg-amber-500 hover:bg-amber-600 text-gray-900 p-2 rounded-lg transition-colors shadow-md relative z-50" onclick="toggleSidebar()">
+        <button id="toggleBtn" class="bg-amber-500 hover:bg-amber-600 text-gray-900 p-2 rounded-lg shadow-md" onclick="toggleSidebar()">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
             </svg>
@@ -173,137 +115,81 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     </div>
 
     <?php if (isset($error_message)): ?>
-        <div class="bg-red-100 border border-red-400 text-red-700 px-3 sm:px-4 py-3 rounded-lg mb-4 shadow-md text-sm" role="alert">
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4 shadow-md">
             ❌ <?= $error_message ?>
         </div>
     <?php endif; ?>
 
     <div class="bg-white p-4 sm:p-6 rounded-xl shadow-lg">
         <div class="flex items-center mb-6 border-b pb-4">
-            <a href="dataruangmultiguna_admin.php" class="bg-gray-700 hover:bg-gray-800 text-white p-2 sm:p-3 rounded-lg mr-3 sm:mr-4 transition-colors text-sm sm:text-base">←</a>
-            
+            <a href="dataruangmultiguna_admin.php" class="bg-gray-700 hover:bg-gray-800 text-white p-2 rounded-lg mr-4 transition-colors">←</a>
             <div>
-                <h1 class="text-xl sm:text-2xl font-bold text-dark-accent">Tambah Data Ruangan</h1>
-                <p class="text-gray-500 text-xs sm:text-sm">Tambahkan ruangan multiguna baru ke sistem</p>
+                <h1 class="text-2xl font-bold text-dark-accent">Tambah Data Ruangan</h1>
+                <p class="text-gray-500 text-sm">Tambahkan ruangan multiguna baru ke sistem</p>
             </div>
         </div>
 
         <form method="POST" enctype="multipart/form-data" id="tambahForm">
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10">
-                
-                <!-- Left Column -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Kolom Kiri -->
                 <div class="space-y-5">
-                    <div class="image-upload-area w-full h-48 sm:h-64 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center hover:border-amber-500 relative">
+                    <div class="image-upload-area w-full h-48 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center hover:border-amber-500 relative">
                         <input type="file" id="fileInput" name="gambar" accept="image/*" onchange="previewImage(event)">
-                        
                         <div class="text-center text-gray-500 upload-placeholder" id="uploadPlaceholder">
-                            <p class="font-semibold text-sm sm:text-base">📷 Klik untuk menambah gambar</p>
+                            <p class="font-semibold">📷 Klik untuk menambah gambar</p>
                             <small class="text-xs">JPG, PNG maksimal 2MB (Opsional)</small>
                         </div>
-                        <img id="previewImg" class="preview-image absolute inset-0" style="display: none;" alt="Preview">
+                        <img id="previewImg" class="preview-image absolute inset-0 hidden" alt="Preview">
                     </div>
 
-                    <div class="form-group">
-                        <label for="nama_ruang" class="block font-semibold mb-2 text-sm sm:text-base">Nama Ruang <span class="text-red-500">*</span></label>
-                        <input type="text" id="nama_ruang" name="nama_ruang" 
-                               class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm sm:text-base" 
-                               placeholder="Isi Nama Ruang" required 
-                               value="<?= htmlspecialchars($_POST['nama_ruang'] ?? '') ?>">
+                    <div>
+                        <label class="block font-semibold mb-2">Nama Ruang <span class="text-red-500">*</span></label>
+                        <input type="text" name="nama_ruang" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500" required>
                     </div>
 
-                    <div class="form-group">
-                        <label for="kapasitas" class="block font-semibold mb-2 text-sm sm:text-base">Kapasitas <span class="text-red-500">*</span></label>
-                        <input type="text" id="kapasitas" name="kapasitas" 
-                               class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm sm:text-base" 
-                               placeholder="Isi Kapasitas" required
-                               value="<?= htmlspecialchars($_POST['kapasitas'] ?? '') ?>">
+                    <div>
+                        <label class="block font-semibold mb-2">Kapasitas <span class="text-red-500">*</span></label>
+                        <input type="text" name="kapasitas" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500" required>
                     </div>
                 </div>
 
-                <!-- Right Column -->
+                <!-- Kolom Kanan -->
                 <div class="space-y-5">
-                    <div class="form-group">
-                        <label for="lokasi" class="block font-semibold mb-2 text-sm sm:text-base">Lokasi <span class="text-red-500">*</span></label>
-                        <input type="text" id="lokasi" name="lokasi" 
-                               class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm sm:text-base" 
-                               placeholder="Isi Lokasi" required
-                               value="<?= htmlspecialchars($_POST['lokasi'] ?? '') ?>">
+                    <div>
+                        <label class="block font-semibold mb-2">Lokasi <span class="text-red-500">*</span></label>
+                        <input type="text" name="lokasi" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500" required>
                     </div>
 
-                    <div class="form-group">
-                        <label class="block font-semibold mb-2 text-sm sm:text-base">Tipe Tarif <span class="text-red-500">*</span></label>
-                        <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
-                            <div class="flex items-center gap-4 sm:gap-6">
-                                <label class="flex items-center gap-2 cursor-pointer text-sm sm:text-base">
-                                    <input type="radio" id="gratis" name="tipe_tarif" value="gratis" class="form-radio text-amber-500 h-4 w-4"
-                                           <?= (isset($_POST['tipe_tarif']) && $_POST['tipe_tarif'] === 'gratis') ? 'checked' : '' ?>>
-                                    Gratis
-                                </label>
-                                <label class="flex items-center gap-2 cursor-pointer text-sm sm:text-base">
-                                    <input type="radio" id="berbayar" name="tipe_tarif" value="berbayar" class="form-radio text-amber-500 h-4 w-4"
-                                           <?= (!isset($_POST['tipe_tarif']) || $_POST['tipe_tarif'] === 'berbayar') ? 'checked' : '' ?>>
-                                    Berbayar
-                                </label>
-                            </div>
-                            <div class="flex items-center gap-2 text-xs sm:text-sm text-gray-600 sm:border-l sm:pl-4">
-                                <label class="flex items-center gap-1 cursor-pointer">
-                                    <input type="radio" id="hari" name="periode" value="hari" class="form-radio text-amber-500 h-4 w-4" 
-                                        <?= (!isset($_POST['periode']) || $_POST['periode'] === 'hari') ? 'checked' : '' ?>> Hari
-                                </label>
-                                <span>/</span>
-                                <label class="flex items-center gap-1 cursor-pointer">
-                                    <input type="radio" id="jam" name="periode" value="jam" class="form-radio text-amber-500 h-4 w-4"
-                                        <?= (isset($_POST['periode']) && $_POST['periode'] === 'jam') ? 'checked' : '' ?>> Jam
-                                </label>
-                            </div>
+                    <div>
+                        <label class="block font-semibold mb-2">Tipe Tarif <span class="text-red-500">*</span></label>
+                        <div class="flex gap-4">
+                            <label><input type="radio" name="tipe_tarif" value="gratis" onchange="toggleTarifSection()"> Gratis</label>
+                            <label><input type="radio" name="tipe_tarif" value="berbayar" checked onchange="toggleTarifSection()"> Berbayar</label>
                         </div>
                     </div>
 
-                    <div class="form-group" id="tarifSection">
-                        <label class="block font-semibold mb-2 text-sm sm:text-base">Tarif Sewa Internal/Eksternal <span class="text-red-500">*</span></label>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <input type="number" name="tarif_internal" 
-                                       class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm sm:text-base" 
-                                       placeholder="Tarif Internal" required
-                                       value="<?= htmlspecialchars($_POST['tarif_internal'] ?? '') ?>">
-                                <div class="mt-2 text-xs sm:text-sm text-gray-600">
-                                    <span class="font-medium">Internal IT PLN</span>
-                                </div>
-                            </div>
-                            <div>
-                                <input type="number" name="tarif_eksternal" 
-                                       class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm sm:text-base" 
-                                       placeholder="Tarif Eksternal" required
-                                       value="<?= htmlspecialchars($_POST['tarif_eksternal'] ?? '') ?>">
-                                <div class="mt-2 text-xs sm:text-sm text-gray-600">
-                                    <span class="font-medium">Eksternal</span>
-                                </div>
-                            </div>
+                    <div id="tarifSection">
+                        <label class="block font-semibold mb-2">Tarif Internal / Eksternal</label>
+                        <div class="grid grid-cols-2 gap-4">
+                            <input type="number" name="tarif_internal" class="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500" placeholder="Internal" required>
+                            <input type="number" name="tarif_eksternal" class="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500" placeholder="Eksternal" required>
                         </div>
                     </div>
 
-                    <div class="form-group">
-                        <label for="keterangan" class="block font-semibold mb-2 text-sm sm:text-base">Keterangan <span class="text-red-500">*</span></label>
-                        <textarea id="keterangan" name="keterangan" rows="4" 
-                                 class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm sm:text-base" 
-                                 placeholder="Isi Keterangan" required><?= htmlspecialchars($_POST['keterangan'] ?? '') ?></textarea>
+                    <div>
+                        <label class="block font-semibold mb-2">Keterangan <span class="text-red-500">*</span></label>
+                        <textarea name="keterangan" rows="3" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500" required></textarea>
                     </div>
                 </div>
             </div>
 
-            <div class="flex flex-col sm:flex-row justify-end gap-3 mt-6 sm:mt-8 pt-4 border-t border-gray-200">
-                <button type="button" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold px-4 sm:px-6 py-2 sm:py-3 rounded-lg shadow transition-colors text-sm sm:text-base order-2 sm:order-1" onclick="resetForm()">
-                    Batal
-                </button>
-                <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-gray-900 font-semibold px-4 sm:px-6 py-2 sm:py-3 rounded-lg shadow transition-colors text-sm sm:text-base order-1 sm:order-2">
-                    Tambah Data
-                </button>
+            <div class="flex justify-end gap-3 mt-6">
+                <a href="dataruangmultiguna_admin.php" class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-lg">Batal</a>
+                <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-gray-900 font-semibold px-6 py-2 rounded-lg">Tambah Data</button>
             </div>
         </form>
     </div>
 </div>
-
 <script>
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');

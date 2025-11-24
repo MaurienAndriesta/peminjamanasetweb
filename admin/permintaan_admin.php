@@ -1,65 +1,101 @@
 <?php
-require_once 'config/database.php';
-$db = new Database();
-
+require_once '../koneksi.php'; 
 $success_message = null;
 
-// ✅ Proses update status
+/* =========================
+   UPDATE STATUS PEMESANAN
+   ========================= */
 if (isset($_GET['action']) && isset($_GET['id'])) {
-    $id = (int)$_GET['id'];
+    $id = (int) $_GET['id'];
     $action = $_GET['action'];
 
     if ($action === 'approve') {
-        $db->query("UPDATE pemesanan SET status = 'disetujui' WHERE id = :id");
-        $db->bind(':id', $id);
-        $db->execute();
-        $success_message = "✅ Pemesanan berhasil disetujui.";
+        $sql = "UPDATE pemesanan SET status = 'disetujui' WHERE id = ?";
     } elseif ($action === 'reject') {
-        $db->query("UPDATE pemesanan SET status = 'ditolak' WHERE id = :id");
-        $db->bind(':id', $id);
-        $db->execute();
-        $success_message = "❌ Pemesanan berhasil ditolak.";
+        $sql = "UPDATE pemesanan SET status = 'ditolak' WHERE id = ?";
     }
+
+    $stmt = mysqli_prepare($koneksi, $sql);
+    mysqli_stmt_bind_param($stmt, "i", $id);
+    mysqli_stmt_execute($stmt);
+
+    $success_message = ($action === 'approve') 
+        ? "✅ Pemesanan berhasil disetujui." 
+        : "❌ Pemesanan berhasil ditolak.";
 
     $redirect_params = [];
     if ($success_message) $redirect_params['success_msg'] = urlencode($success_message);
     if (isset($_GET['status'])) $redirect_params['status'] = urlencode($_GET['status']);
     if (isset($_GET['search'])) $redirect_params['search'] = urlencode($_GET['search']);
     $query_string = http_build_query($redirect_params);
+
     header("Location: permintaan_admin.php" . ($query_string ? "?" . $query_string : ""));
     exit;
 }
 
+/* =========================
+   Ambil success_msg dari URL
+   ========================= */
 if (isset($_GET['success_msg'])) {
     $success_message = htmlspecialchars($_GET['success_msg']);
 }
 
-// ✅ Filter dan pencarian
+/* =========================
+   FILTER & PENCARIAN
+   ========================= */
 $status_filter = $_GET['status'] ?? 'all';
 $search = $_GET['search'] ?? '';
 
-$query = "SELECT * FROM pemesanan WHERE 1=1";
+$sql = "SELECT * FROM tbl_pengajuan WHERE 1=1";
+$params = [];
+$types = "";
+
 if ($status_filter !== 'all') {
-    $query .= " AND status = :status";
+    $sql .= " AND status = ?";
+    $params[] = $status_filter;
+    $types .= "s";
 }
+
 if (!empty($search)) {
-    $query .= " AND (pemohon LIKE :search OR nama_ruang LIKE :search OR keterangan LIKE :search)";
+    $sql .= " AND peminjam LIKE ? OR nama_ruang LIKE ? OR keterangan LIKE ?)";
+    $keyword = "%$search%";
+    $params[] = $keyword;
+    $params[] = $keyword;
+    $params[] = $keyword;
+    $types .= "sss";
 }
-$query .= " ORDER BY created_at DESC";
 
-$db->query($query);
-if ($status_filter !== 'all') $db->bind(':status', $status_filter);
-if (!empty($search)) $db->bind(':search', "%$search%");
-$pemesanan = $db->resultSet();
+$sql .= " ORDER BY created_at DESC";
 
-// ✅ Statistik
-$db->query("SELECT 
-    COUNT(*) as total,
-    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-    SUM(CASE WHEN status = 'disetujui' THEN 1 ELSE 0 END) as disetujui,
-    SUM(CASE WHEN status = 'ditolak' THEN 1 ELSE 0 END) as ditolak
-    FROM pemesanan");
-$stats = $db->single();
+$stmt = mysqli_prepare($koneksi, $sql);
+
+if (!empty($params)) {
+    mysqli_stmt_bind_param($stmt, $types, ...$params);
+}
+
+mysqli_stmt_execute($stmt);
+$result = mysqli_stmt_get_result($stmt);
+
+/* Simpan hasil ke array */
+$pemesanan = [];
+while ($row = mysqli_fetch_assoc($result)) {
+    $pemesanan[] = $row;
+}
+
+/* =========================
+   STATISTIK PEMESANAN
+   ========================= */
+$sql_stats = "
+    SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
+        SUM(CASE WHEN status = 'disetujui' THEN 1 ELSE 0 END) AS disetujui,
+        SUM(CASE WHEN status = 'ditolak' THEN 1 ELSE 0 END) AS ditolak
+    FROM tbl_pengajuan
+";
+
+$res_stats = mysqli_query($koneksi, $sql_stats);
+$stats = mysqli_fetch_assoc($res_stats);
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -166,7 +202,7 @@ body {
 
     <!-- Filter -->
     <form method="GET" class="bg-gray-50 border border-gray-200 rounded-xl p-3 sm:p-4 flex flex-wrap gap-3 items-end mb-6 sm:mb-8 shadow-sm">
-      <input type="text" name="search" placeholder="🔍 Cari pemohon / ruang..." value="<?= htmlspecialchars($search) ?>" class="flex-1 min-w-[180px] px-3 py-2 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 text-sm">
+      <input type="text" name="search" placeholder="🔍 Cari peminjam / ruang..." value="<?= htmlspecialchars($search) ?>" class="flex-1 min-w-[180px] px-3 py-2 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 text-sm">
       <select name="status" class="px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-amber-500 focus:border-amber-500 text-sm">
         <option value="all" <?= $status_filter==='all'?'selected':'' ?>>Semua Status</option>
         <option value="pending" <?= $status_filter==='pending'?'selected':'' ?>>Menunggu</option>
@@ -178,87 +214,93 @@ body {
       </button>
     </form>
 
-    <!-- Table -->
-    <div class="hidden lg:block overflow-x-auto border border-gray-100 rounded-xl shadow-md">
-      <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-700 text-white">
-          <tr>
-            <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">No</th>
-            <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Pemohon</th>
-            <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Ruang</th>
-            <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Mulai</th>
-            <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Selesai</th>
-            <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Status</th>
-            <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Keterangan</th>
-            <th class="px-4 py-3 text-center text-xs font-bold uppercase tracking-wider">Aksi</th>
-          </tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
-          <?php if (empty($pemesanan)): ?>
-          <tr><td colspan="8" class="px-4 py-6 text-center text-gray-500 italic text-sm">Tidak ada data permintaan</td></tr>
-          <?php else: foreach($pemesanan as $i=>$r): ?>
-          <tr class="hover:bg-gray-50 transition-colors">
-            <td class="px-4 py-3 text-sm"><?= $i+1 ?></td>
-            <td class="px-4 py-3 text-sm font-semibold text-gray-800"><?= htmlspecialchars($r['pemohon']) ?></td>
-            <td class="px-4 py-3 text-sm"><?= htmlspecialchars($r['nama_ruang']) ?></td>
-            <td class="px-4 py-3 text-sm"><?= date('d/m/Y', strtotime($r['tanggal_mulai'])) ?></td>
-            <td class="px-4 py-3 text-sm"><?= date('d/m/Y', strtotime($r['tanggal_selesai'])) ?></td>
-            <td class="px-4 py-3 text-sm">
-              <?php
-                $status = strtolower($r['status']);
-                $color = $status==='pending' ? 'bg-yellow-100 text-yellow-800' : ($status==='disetujui' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800');
-              ?>
-              <span class="px-3 py-1 rounded-full text-xs font-semibold <?= $color ?>"><?= ucfirst($r['status']) ?></span>
-            </td>
-            <td class="px-4 py-3 text-xs text-gray-600 truncate max-w-xs"><?= htmlspecialchars($r['keterangan']) ?></td>
-            <td class="px-4 py-3 text-center">
-              <div class="flex gap-2 justify-center flex-wrap">
-                <a href="detailpermintaan_admin.php?id=<?= $r['id'] ?>" class="px-3 py-1 text-xs font-semibold rounded-lg bg-gray-500 hover:bg-gray-600 text-white transition">Detail</a>
-                <?php if ($status==='pending'): ?>
-                <a href="?action=approve&id=<?= $r['id'] ?>&status=<?= $status_filter ?>&search=<?= urlencode($search) ?>" class="px-3 py-1 text-xs font-semibold rounded-lg bg-green-500 hover:bg-green-600 text-white transition">Setujui</a>
-                <a href="?action=reject&id=<?= $r['id'] ?>&status=<?= $status_filter ?>&search=<?= urlencode($search) ?>" class="px-3 py-1 text-xs font-semibold rounded-lg bg-red-500 hover:bg-red-600 text-white transition">Tolak</a>
-                <?php endif; ?>
-              </div>
-            </td>
-          </tr>
-          <?php endforeach; endif; ?>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Mobile Cards -->
-    <div class="lg:hidden space-y-4 pt-4">
+    <!-- Table Desktop -->
+<div class="hidden lg:block overflow-x-auto border border-gray-100 rounded-xl shadow-md">
+  <table class="min-w-full divide-y divide-gray-200">
+    <thead class="bg-gray-700 text-white">
+      <tr>
+        <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">No</th>
+        <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Peminjam</th>
+        <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Kategori</th>
+        <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Ruang / Fasilitas / Lab</th>
+        <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Mulai</th>
+        <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Selesai</th>
+        <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Status</th>
+        <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Keterangan</th>
+        <th class="px-4 py-3 text-center text-xs font-bold uppercase tracking-wider">Aksi</th>
+      </tr>
+    </thead>
+    <tbody class="bg-white divide-y divide-gray-200">
       <?php if (empty($pemesanan)): ?>
-      <div class="text-center p-6 text-gray-500 bg-gray-50 rounded-lg italic text-sm">Tidak ada data permintaan</div>
+      <tr>
+        <td colspan="9" class="px-4 py-6 text-center text-gray-500 italic text-sm">
+          Tidak ada data permintaan
+        </td>
+      </tr>
       <?php else: foreach($pemesanan as $i=>$r): ?>
-      <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 shadow-sm">
-        <div class="flex justify-between items-start mb-2">
-          <div>
-            <div class="text-xs text-gray-500 mb-1">No. <?= $i+1 ?> • <?= date('d/m/Y', strtotime($r['created_at'])) ?></div>
-            <h3 class="font-bold text-sm text-gray-900"><?= htmlspecialchars($r['nama_ruang']) ?></h3>
-            <div class="text-xs text-gray-700">Pemohon: <?= htmlspecialchars($r['pemohon']) ?></div>
-          </div>
+      <tr class="hover:bg-gray-50 transition-colors">
+        <td class="px-4 py-3 text-sm"><?= $i+1 ?></td>
+        <td class="px-4 py-3 text-sm font-semibold text-gray-800"><?= htmlspecialchars($r['nama_peminjam']) ?></td>
+        <td class="px-4 py-3 text-sm"><?= htmlspecialchars($r['kategori']) ?></td>
+        <td class="px-4 py-3 text-sm"><?= htmlspecialchars($r['subpilihan']) ?></td>
+        <td class="px-4 py-3 text-sm"><?= date('d/m/Y', strtotime($r['tanggal_peminjaman'])) ?></td>
+        <td class="px-4 py-3 text-sm"><?= date('d/m/Y', strtotime($r['tanggal_selesai'])) ?></td>
+        <td class="px-4 py-3 text-sm">
           <?php
             $status = strtolower($r['status']);
-            $color = $status==='pending' ? 'bg-yellow-400 text-gray-900' : ($status==='disetujui' ? 'bg-green-500 text-white' : 'bg-red-500 text-white');
+            $color = $status==='pending' ? 'bg-yellow-100 text-yellow-800' : ($status==='disetujui' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800');
           ?>
-          <span class="px-3 py-1 rounded-full text-xs font-bold <?= $color ?>"><?= ucfirst($r['status']) ?></span>
-        </div>
-        <div class="text-xs text-gray-700 mb-3 space-y-1">
-          <div>Mulai: <span class="font-semibold"><?= date('d/m/Y', strtotime($r['tanggal_mulai'])) ?></span></div>
-          <div>Selesai: <span class="font-semibold"><?= date('d/m/Y', strtotime($r['tanggal_selesai'])) ?></span></div>
-          <div>Keterangan: <span class="italic text-gray-600"><?= htmlspecialchars($r['keterangan']) ?></span></div>
-        </div>
-        <div class="flex gap-2 justify-start flex-wrap">
-          <a href="detailpermintaan_admin.php?id=<?= $r['id'] ?>" class="px-3 py-2 text-xs font-bold rounded-lg bg-gray-500 hover:bg-gray-600 text-white transition flex-1 text-center">Detail</a>
-          <?php if ($status==='pending'): ?>
-          <a href="?action=approve&id=<?= $r['id'] ?>&status=<?= $status_filter ?>&search=<?= urlencode($search) ?>" class="px-3 py-2 text-xs font-bold rounded-lg bg-green-500 hover:bg-green-600 text-white flex-1 text-center">Setujui</a>
-          <a href="?action=reject&id=<?= $r['id'] ?>&status=<?= $status_filter ?>&search=<?= urlencode($search) ?>" class="px-3 py-2 text-xs font-bold rounded-lg bg-red-500 hover:bg-red-600 text-white flex-1 text-center">Tolak</a>
-          <?php endif; ?>
-        </div>
-      </div>
+          <span class="px-3 py-1 rounded-full text-xs font-semibold <?= $color ?>"><?= ucfirst($r['status']) ?></span>
+        </td>
+        <td class="px-4 py-3 text-xs text-gray-600 truncate max-w-xs"><?= htmlspecialchars($r['agenda']) ?></td>
+        <td class="px-4 py-3 text-center">
+          <div class="flex gap-2 justify-center flex-wrap">
+            <a href="detailpermintaan_admin.php?id=<?= $r['id'] ?>" class="px-3 py-1 text-xs font-semibold rounded-lg bg-gray-500 hover:bg-gray-600 text-white transition">Detail</a>
+            <?php if ($status==='pending'): ?>
+            <a href="?action=approve&id=<?= $r['id'] ?>&status=<?= $status_filter ?>&search=<?= urlencode($search) ?>" class="px-3 py-1 text-xs font-semibold rounded-lg bg-green-500 hover:bg-green-600 text-white transition">Setujui</a>
+            <a href="?action=reject&id=<?= $r['id'] ?>&status=<?= $status_filter ?>&search=<?= urlencode($search) ?>" class="px-3 py-1 text-xs font-semibold rounded-lg bg-red-500 hover:bg-red-600 text-white transition">Tolak</a>
+            <?php endif; ?>
+          </div>
+        </td>
+      </tr>
       <?php endforeach; endif; ?>
+    </tbody>
+  </table>
+</div>
+
+<!-- Mobile Cards -->
+<div class="lg:hidden space-y-4 pt-4">
+  <?php if (empty($pemesanan)): ?>
+  <div class="text-center p-6 text-gray-500 bg-gray-50 rounded-lg italic text-sm">Tidak ada data permintaan</div>
+  <?php else: foreach($pemesanan as $i=>$r): ?>
+  <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 shadow-sm">
+    <div class="flex justify-between items-start mb-2">
+      <div>
+        <div class="text-xs text-gray-500 mb-1">No. <?= $i+1 ?> • <?= date('d/m/Y', strtotime($r['created_at'])) ?></div>
+        <h3 class="font-bold text-sm text-gray-900"><?= htmlspecialchars($r['subpilihan']) ?></h3>
+        <div class="text-xs text-gray-700">Peminjam: <?= htmlspecialchars($r['nama_peminjam']) ?></div>
+      </div>
+      <?php
+        $status = strtolower($r['status']);
+        $color = $status==='pending' ? 'bg-yellow-400 text-gray-900' : ($status==='disetujui' ? 'bg-green-500 text-white' : 'bg-red-500 text-white');
+      ?>
+      <span class="px-3 py-1 rounded-full text-xs font-bold <?= $color ?>"><?= ucfirst($r['status']) ?></span>
     </div>
+    <div class="text-xs text-gray-700 mb-3 space-y-1">
+      <div>Mulai: <span class="font-semibold"><?= date('d/m/Y', strtotime($r['tanggal_peminjaman'])) ?></span></div>
+      <div>Selesai: <span class="font-semibold"><?= date('d/m/Y', strtotime($r['tanggal_selesai'])) ?></span></div>
+      <div>Keterangan: <span class="italic text-gray-600"><?= htmlspecialchars($r['agenda']) ?></span></div>
+    </div>
+    <div class="flex gap-2 justify-start flex-wrap">
+      <a href="detailpermintaan_admin.php?id=<?= $r['id'] ?>" class="px-3 py-2 text-xs font-bold rounded-lg bg-gray-500 hover:bg-gray-600 text-white transition flex-1 text-center">Detail</a>
+      <?php if ($status==='pending'): ?>
+      <a href="?action=approve&id=<?= $r['id'] ?>&status=<?= $status_filter ?>&search=<?= urlencode($search) ?>" class="px-3 py-2 text-xs font-bold rounded-lg bg-green-500 hover:bg-green-600 text-white flex-1 text-center">Setujui</a>
+      <a href="?action=reject&id=<?= $r['id'] ?>&status=<?= $status_filter ?>&search=<?= urlencode($search) ?>" class="px-3 py-2 text-xs font-bold rounded-lg bg-red-500 hover:bg-red-600 text-white flex-1 text-center">Tolak</a>
+      <?php endif; ?>
+    </div>
+  </div>
+  <?php endforeach; endif; ?>
+</div>
 
   </div>
 </div>
@@ -390,4 +432,3 @@ document.addEventListener("DOMContentLoaded", function() {
 
 </body>
 </html>
-

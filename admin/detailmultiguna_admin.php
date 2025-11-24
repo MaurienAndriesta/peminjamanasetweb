@@ -1,11 +1,8 @@
 <?php
-// Include database configuration
-require_once 'config/database.php';
+require_once '../koneksi.php';
+$db = $koneksi;
 
-// Initialize database connection
-$db = new Database();
-
-// Get ruangan ID from URL parameter
+// Ambil ID dari parameter URL
 $ruangan_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
 if ($ruangan_id <= 0) {
@@ -14,47 +11,47 @@ if ($ruangan_id <= 0) {
 }
 
 // Query untuk mendapatkan detail ruangan
-$db->query("SELECT id, nama, kapasitas, lokasi, tarif_internal, tarif_eksternal, keterangan, gambar, created_at, updated_at 
-           FROM ruangan_multiguna 
-           WHERE id = :id AND status = 'aktif'");
-$db->bind(':id', $ruangan_id);
+$sql = "SELECT id, nama, kapasitas, lokasi, tarif_internal, tarif_eksternal, keterangan, gambar, created_at, updated_at 
+        FROM tbl_ruangmultiguna
+        WHERE id = ? AND status = 'tersedia'";
 
-try {
-    $ruangan_detail = $db->single();
-    
-    if (!$ruangan_detail) {
-        $error_message = "Data ruangan tidak ditemukan atau sudah tidak aktif.";
-    }
-} catch (Exception $e) {
-    $error_message = "Terjadi kesalahan saat mengambil data: " . $e->getMessage();
+$stmt = $db->prepare($sql);
+$stmt->bind_param("i", $ruangan_id);
+$stmt->execute();
+$result = $stmt->get_result();
+
+if ($result->num_rows > 0) {
+    $ruangan_detail = $result->fetch_assoc();
+} else {
+    $error_message = "Data ruangan tidak ditemukan atau sudah tidak aktif.";
 }
 
-// Process keterangan (split by newline for display)
+// --- Proses Keterangan (split by newline untuk tampilan) ---
 $keterangan_array = [];
 if (isset($ruangan_detail['keterangan'])) {
-    // Mengganti '\n' yang mungkin dimasukkan dari form/database menjadi '\n' asli
+    // Ganti '\n' literal menjadi newline sebenarnya
     $raw_keterangan = str_replace('\n', "\n", $ruangan_detail['keterangan']);
     $keterangan_array = explode("\n", $raw_keterangan);
-    // Remove empty entries
+    // Hapus baris kosong
     $keterangan_array = array_filter($keterangan_array, function($item) {
         return !empty(trim($item));
     });
 }
 
-// Process gambar (for multiple images if implemented)
+// --- Proses Gambar (jika ada banyak gambar dipisahkan koma) ---
 $images = [];
 if (isset($ruangan_detail['gambar']) && !empty($ruangan_detail['gambar'])) {
-    // Asumsi gambar dipisahkan dengan koma atau hanya satu
     $images = explode(',', $ruangan_detail['gambar']);
     $images = array_map('trim', $images);
-    $images = array_filter($images); // Bersihkan jika ada nilai kosong
+    $images = array_filter($images);
 }
 
-// Jika tidak ada gambar valid, gunakan placeholder
+// --- Placeholder jika tidak ada gambar ---
 if (empty($images)) {
-    $images = ['default-room.jpg']; 
+    $images = ['default-room.jpg'];
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="id">
 <head>

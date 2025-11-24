@@ -1,11 +1,8 @@
 <?php
-// Include database configuration
-require_once 'config/database.php';
+require_once '../koneksi.php';
+$db = $koneksi;
 
-// Initialize database connection
-$db = new Database();
-
-// Get fasilitas ID from URL parameter
+// Ambil ID fasilitas dari URL
 $fasilitas_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
 if ($fasilitas_id <= 0) {
@@ -13,25 +10,33 @@ if ($fasilitas_id <= 0) {
     exit;
 }
 
-// Query untuk mendapatkan detail fasilitas
-$db->query("SELECT id, nama, kapasitas, lokasi, tarif_internal, tarif_eksternal, keterangan, gambar, created_at, updated_at 
-            FROM fasilitas 
-            WHERE id = :id AND status = 'aktif'");
-$db->bind(':id', $fasilitas_id);
-
 $fasilitas_detail = [];
 $error_message = null;
 
-try {
-    $fasilitas_detail = $db->single();
-    
-    if (!$fasilitas_detail) {
-        $error_message = "Data fasilitas tidak ditemukan atau sudah tidak aktif.";
-    }
-} catch (Exception $e) {
-    $error_message = "Terjadi kesalahan saat mengambil data: Pastikan tabel 'fasilitas' sudah memiliki kolom: gambar, keterangan, tarif_internal, dan tarif_eksternal.";
-    $fasilitas_detail = [];
+// --- Prepared statement mysqli ---
+$sql = "SELECT id, nama, kapasitas, tarif_internal, tarif_eksternal, keterangan, gambar, created_at, updated_at 
+        FROM tbl_fasilitas 
+        WHERE id = ? AND status = 'tersedia'";
+
+$stmt = $db->prepare($sql);
+if (!$stmt) {
+    die("Error prepare statement: " . $db->error);
 }
+
+$stmt->bind_param("i", $fasilitas_id);
+
+if ($stmt->execute()) {
+    $result = $stmt->get_result();
+    $fasilitas_detail = $result->fetch_assoc();
+
+    if (!$fasilitas_detail) {
+        $error_message = "Data fasilitas tidak ditemukan atau sudah tidak tersedia.";
+    }
+} else {
+    $error_message = "Terjadi kesalahan saat mengambil data: " . $stmt->error;
+}
+
+$stmt->close();
 
 // Process keterangan (split by newline for display)
 $keterangan_array = [];
@@ -51,6 +56,7 @@ if (isset($fasilitas_detail['gambar']) && !empty($fasilitas_detail['gambar'])) {
 // Helper untuk menampilkan tombol edit
 $is_fasilitas_available = !empty($fasilitas_detail);
 ?>
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -144,10 +150,7 @@ $is_fasilitas_available = !empty($fasilitas_detail);
                         </div>
                     </div>
                     
-                    <div class="detail-item">
-                        <label class="block font-semibold mb-1 text-sm text-gray-600">Lokasi</label>
-                        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 text-gray-800"><?= htmlspecialchars($fasilitas_detail['lokasi']) ?></div>
-                    </div>
+                    
                 </div>
             </div>
 

@@ -1,5 +1,5 @@
 <?php
-include 'koneksi.php';
+require_once '../koneksi.php';
 
 // ================= DATA MENU =================
 $menu_items = [
@@ -30,7 +30,7 @@ $menu_items = [
 
 // ================= AMBIL DATA RUANGAN =================
 $data = [];
-$result = $koneksi->query("SELECT * FROM ruanganmultiguna ORDER BY id ASC");
+$result = $koneksi->query("SELECT * FROM tbl_ruangmultiguna ORDER BY id ASC");
 if ($result && $result->num_rows > 0) {
     while ($row = $result->fetch_assoc()) {
         $data[] = $row;
@@ -113,100 +113,106 @@ function renderMenu($items, $prefix = 'root') {
   </style>
 </head>
 
-<body class="bg-gradient-to-br from-[#D1E5EA] to-white min-h-screen font-sans text-gray-800">
+<body class="flex flex-col min-h-screen bg-gradient-to-br from-[#D1E5EA] to-white font-sans text-gray-800">
 
-<!-- Navbar -->
-<nav class="fixed top-0 left-0 right-0 bg-[#D1E5EA]/90 backdrop-blur-md shadow-md h-16 z-50 flex items-center gap-4 px-6 transition-all">
-  <button id="hamburgerBtn" onclick="toggleSidebar()" 
-    class="bg-gray-800 text-white p-3 rounded-md">☰</button>
+  <!-- Navbar -->
+  <nav class="fixed top-0 left-0 right-0 bg-[#D1E5EA]/90 backdrop-blur-md shadow-md h-16 z-50 flex items-center gap-4 px-6 transition-all">
+    <button id="hamburgerBtn" onclick="toggleSidebar()" 
+      class="bg-gray-800 text-white p-3 rounded-md">☰</button>
 
-  <form class="flex-1">
-    <input id="searchInput" type="text" placeholder="Cari ruangan..." 
-      class="w-full px-4 py-2 rounded-full border border-gray-300 text-sm shadow-sm focus:ring-2 focus:ring-blue-200 transition-all">
-  </form>
-</nav>
-
-<!-- Overlay -->
-<div id="overlay" class="hidden fixed inset-0 bg-black/40 z-40" onclick="closeSidebar()"></div>
-
-<!-- Sidebar -->
-<div id="sidebar" class="fixed top-0 left-0 w-72 h-full bg-gray-800 text-white transform -translate-x-full transition-transform duration-300 z-50 shadow-2xl">
-  <div class="bg-gray-900 px-6 py-5 font-semibold text-center border-b border-gray-700 text-lg uppercase tracking-wide">
-    Menu Utama
-  </div>
-  <nav class="p-4">
-    <?php renderMenu($menu_items); ?>
+    <form class="flex-1">
+      <input id="searchInput" type="text" placeholder="Cari ruangan..." 
+        class="w-full px-4 py-2 rounded-full border border-gray-300 text-sm shadow-sm focus:ring-2 focus:ring-blue-200 transition-all">
+    </form>
   </nav>
-</div>
 
-<!-- Main -->
-<main class="pt-24 px-6 max-w-7xl mx-auto fade-in">
+  <!-- Overlay -->
+  <div id="overlay" class="hidden fixed inset-0 bg-black/40 z-40" onclick="closeSidebar()"></div>
+
+  <!-- Sidebar -->
+  <div id="sidebar" class="fixed top-0 left-0 w-72 h-full bg-gray-800 text-white transform -translate-x-full transition-transform duration-300 z-50 shadow-2xl">
+    <div class="bg-gray-900 px-6 py-5 font-semibold text-center border-b border-gray-700 text-lg uppercase tracking-wide">
+      Menu Utama
+    </div>
+    <nav class="p-4">
+      <?php renderMenu($menu_items); ?>
+    </nav>
+  </div>
+
+  <!-- Main -->
+  <main class="flex-grow pt-24 px-6 fade-in w-full">
   <h2 class="text-2xl font-bold text-gray-700 mb-6 border-l-4 border-blue-400 pl-3">
     Daftar Ruangan Multiguna
   </h2>
 
-  <div class="bg-white border border-blue-200 rounded-2xl shadow-lg overflow-hidden transition-all">
-    <table class="w-full text-sm" id="ruanganTable">
-      <thead>
-        <tr class="bg-[#E3F2F7] text-gray-700 uppercase text-xs tracking-wider">
-          <th class="border border-gray-200 px-4 py-3 text-left">No</th>
-          <th class="border border-gray-200 px-4 py-3 text-left">Foto</th>
-          <th class="border border-gray-200 px-4 py-3 text-left">Nama Ruangan</th>
-          <th class="border border-gray-200 px-4 py-3 text-left">Kapasitas</th>
-          <th class="border border-gray-200 px-4 py-3 text-left">Lokasi</th>
-          <th class="border border-gray-200 px-4 py-3 text-left">Internal ITPLN</th>
-          <th class="border border-gray-200 px-4 py-3 text-left">Eksternal ITPLN</th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php foreach($data as $row): ?>
-        <tr class="hover:bg-blue-50 transition duration-200">
-          <td class="border border-gray-200 px-4 py-3"><?= $row['no'] ?></td>
-          <td class="border border-gray-200 px-4 py-3 text-center">
-            <?php if (!empty($row['foto'])): ?>
-              <div class="flex flex-col items-center space-y-2">
-                <img src="uploads/ruangan/<?= htmlspecialchars($row['foto']); ?>" 
-                     alt="Foto <?= htmlspecialchars($row['nama']); ?>" 
-                     class="w-24 h-20 object-cover rounded-lg shadow-md hover:scale-105 hover:shadow-lg transition-all duration-300 cursor-pointer"
-                     onclick="showImageModal('uploads/ruangan/<?= htmlspecialchars($row['foto']); ?>')">
-                <button onclick="showImageModal('uploads/ruangan/<?= htmlspecialchars($row['foto']); ?>')" 
-                        class="text-blue-600 text-xs hover:underline transition">Lihat Foto</button>
-              </div>
-            <?php else: ?>
-              <span class="text-gray-400 italic">Tidak ada foto</span>
-            <?php endif; ?>
-          </td>
-          <td class="border border-gray-200 px-4 py-3"><?= $row['nama'] ?></td>
-          <td class="border border-gray-200 px-4 py-3"><?= $row['kapasitas'] ?></td>
-          <td class="border border-gray-200 px-4 py-3"><?= $row['lokasi'] ?></td>
-          <td class="border border-gray-200 px-4 py-3"><?= $row['internal_itpln'] ?></td>
-          <td class="border border-gray-200 px-4 py-3"><?= $row['eksternal_itpln'] ?></td>
-        </tr>
-        <?php endforeach; ?>
-        <tr class="bg-blue-50">
-          <td colspan="8" class="border border-gray-200 px-5 py-5 italic text-gray-700 text-sm leading-relaxed">
-            <b>Keterangan:</b><br>
-            1. Penggunaan ruangan di atas 8 Jam dikenakan biaya tambahan Rp. 150.000,-/jam.<br>
-            2. Penggunaan ruang dan fasilitas pada hari libur (Sabtu - Minggu) dikenakan biaya Rp. 1.500.000,-/hari.<br>
-            3. Penggunaan ruang H-1 untuk persiapan gladi resik dikenakan biaya 5% dari total biaya sewa per hari.<br>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- Modal Foto -->
-  <div id="imageModal" class="fixed inset-0 bg-black/70 flex items-center justify-center hidden z-50">
-    <div class="relative max-w-4xl fade-in">
-      <img id="modalImage" src="" alt="Foto Ruangan" class="rounded-2xl shadow-2xl max-h-[90vh] border-4 border-white transition-all">
-      <button onclick="closeImageModal()" class="absolute -top-4 -right-4 bg-white rounded-full p-2 shadow hover:bg-gray-100 text-lg font-bold transition">✕</button>
+  <div class="bg-white border border-blue-200 rounded-2xl shadow-lg overflow-x-auto transition-all w-full">
+    <table class="min-w-full text-sm" id="ruanganTable">
+        <thead>
+          <tr class="bg-[#E3F2F7] text-gray-700 uppercase text-xs tracking-wider">
+            <th class="border border-gray-200 px-4 py-3 text-left">No</th>
+            <th class="border border-gray-200 px-4 py-3 text-left">Foto</th>
+            <th class="border border-gray-200 px-4 py-3 text-left">Nama Ruangan</th>
+            <th class="border border-gray-200 px-4 py-3 text-left">Kapasitas</th>
+            <th class="border border-gray-200 px-4 py-3 text-left">Lokasi</th>
+            <th class="border border-gray-200 px-4 py-3 text-left">Internal ITPLN</th>
+            <th class="border border-gray-200 px-4 py-3 text-left">Eksternal ITPLN</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach($data as $row): ?>
+          <tr class="hover:bg-blue-50 transition duration-200">
+            <td class="border border-gray-200 px-4 py-3"><?= $row['id'] ?></td>
+            <td class="border border-gray-200 px-4 py-3 text-center">
+              <?php if (!empty($row['gambar'])): ?>
+                <div class="flex flex-col items-center space-y-2">
+                  <img src="uploads/ruangan/<?= htmlspecialchars($row['gambar']); ?>" 
+                      alt="Foto <?= htmlspecialchars($row['nama']); ?>" 
+                      class="w-24 h-20 object-cover rounded-lg shadow-md hover:scale-105 hover:shadow-lg transition-all duration-300 cursor-pointer"
+                      onclick="showImageModal('uploads/ruangan/<?= htmlspecialchars($row['gambar']); ?>')">
+                  <button onclick="showImageModal('uploads/ruangan/<?= htmlspecialchars($row['gambar']); ?>')" 
+                          class="text-blue-600 text-xs hover:underline transition">Lihat Foto</button>
+                </div>
+              <?php else: ?>
+                <span class="text-gray-400 italic">Tidak ada foto</span>
+              <?php endif; ?>
+            </td>
+            <td class="border border-gray-200 px-4 py-3"><?= $row['nama'] ?></td>
+            <td class="border border-gray-200 px-4 py-3"><?= $row['kapasitas'] ?></td>
+            <td class="border border-gray-200 px-4 py-3"><?= $row['lokasi'] ?></td>
+            <td class="border border-gray-200 px-4 py-3 text-green-700 font-semibold">
+              <?= 'Rp ' . number_format($row['tarif_internal'], 0, ',', '.') . '/hari' ?>
+            </td>
+            <td class="border border-gray-200 px-4 py-3 text-blue-700 font-semibold">
+              <?= 'Rp ' . number_format($row['tarif_eksternal'], 0, ',', '.') . '/hari' ?>
+            </td>
+          </tr>
+          <?php endforeach; ?>
+          <tr class="bg-blue-50">
+            <td colspan="8" class="border border-gray-200 px-5 py-5 italic text-gray-700 text-sm leading-relaxed">
+              <b>Keterangan:</b><br>
+              1. Penggunaan ruangan di atas 8 Jam dikenakan biaya tambahan Rp. 150.000,-/jam.<br>
+              2. Penggunaan ruang dan fasilitas pada hari libur (Sabtu - Minggu) dikenakan biaya Rp. 1.500.000,-/hari.<br>
+              3. Penggunaan ruang H-1 untuk persiapan gladi resik dikenakan biaya 5% dari total biaya sewa per hari.<br>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
-  </div>
-</main>
 
-<footer class="w-full bg-[#132544] text-white text-center py-3 mt-10">
-  © <?= date('Y'); ?> Institut Teknologi PLN - Sistem Peminjaman Aset
-</footer>
+    <!-- Modal Foto -->
+    <div id="imageModal" class="fixed inset-0 bg-black/70 flex items-center justify-center hidden z-50">
+      <div class="relative max-w-4xl fade-in">
+        <img id="modalImage" src="" alt="Foto Ruangan" class="rounded-2xl shadow-2xl max-h-[90vh] border-4 border-white transition-all">
+        <button onclick="closeImageModal()" class="absolute -top-4 -right-4 bg-white rounded-full p-2 shadow hover:bg-gray-100 text-lg font-bold transition">✕</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="w-full bg-[#132544] text-white text-center py-3">
+    © <?= date('Y'); ?> Institut Teknologi PLN - Sistem Peminjaman Aset
+  </footer>
+
 
 <script>
 // Sidebar
