@@ -2,71 +2,68 @@
 require_once '../koneksi.php';
 $db = $koneksi;
 
-// Get laboratorium ID dari URL parameter
+// 1. Ambil ID dan Source (Nama Tabel) dari URL
 $laboratorium_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$source_table    = isset($_GET['source']) ? $_GET['source'] : '';
 
-if ($laboratorium_id <= 0) {
-    header('Location: datalaboratorium_admin.php');
+// Daftar tabel yang diizinkan (Keamanan)
+$allowed_tables = ['labftik', 'labften', 'labfket', 'labftbe'];
+
+// Validasi ID dan Source
+if ($laboratorium_id <= 0 || !in_array($source_table, $allowed_tables)) {
+    header("Location: datalaboratorium_admin.php");
     exit;
 }
-
-// Query ambil data laboratorium
-$db->query("SELECT * FROM laboratorium WHERE id = :id");
-$db->bind(':id', $laboratorium_id);
 
 $lab_detail = [];
 $error_message = null;
 
-try {
-    $fetched_data = $db->single();
+// 2. Query Data menggunakan MySQLi
+// Note: Kita tidak memfilter status='tersedia' agar admin tetap bisa melihat detail lab yang sedang tidak tersedia/diperbaiki
+$sql = "SELECT * FROM $source_table WHERE id = ?";
+$stmt = $db->prepare($sql);
+
+if ($stmt) {
+    $stmt->bind_param('i', $laboratorium_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
     
-    if (!$fetched_data) {
+    if ($result->num_rows > 0) {
+        $lab_detail = $result->fetch_assoc();
+        
+        // Inject nama fakultas untuk tampilan
+        $lab_detail['nama_fakultas'] = strtoupper(str_replace('lab', '', $source_table));
+    } else {
         $error_message = "Data laboratorium tidak ditemukan.";
     }
-    $lab_detail = $fetched_data;
-} catch (Exception $e) {
-    $error_message = "Terjadi kesalahan saat mengambil data: " . $e->getMessage();
-    $lab_detail = [];
+    $stmt->close();
+} else {
+    $error_message = "Terjadi kesalahan query database.";
 }
 
-// --- PERBAIKAN SYNTAX ARRAY PADA BARIS INI (Memastikan semua spasi valid) ---
-// Default value untuk kolom yang mungkin kosong / hilang
-$lab_detail = array_merge([
-    'id' => 0,
-    'nama' => '-',
-    'kapasitas' => '-',
-    'lokasi' => '-',
-    'fakultas' => '-',
-    'tarif_laboratorium' => 0, 
-    'satuan_laboratorium' => 'Hari',
-    'tarif_peralatan' => 0, 
-    'satuan_peralatan' => 'Hari',
-    'tarif_internal' => 0,
-    'tarif_eksternal'=> 0,
-    'keterangan' => '',
-    'gambar' => '',
-    'created_at' => date('Y-m-d H:i:s'),
-    'updated_at' => date('Y-m-d H:i:s')
-], $lab_detail ?: []);
-// --- AKHIR PERBAIKAN SYNTAX ARRAY ---
-
-// Process keterangan
+// --- Proses Keterangan (split by newline untuk tampilan list) ---
 $keterangan_array = [];
-if (!empty($lab_detail['keterangan'])) {
-    $keterangan_text = str_replace('\n', "\n", $lab_detail['keterangan']);
-    $keterangan_array = explode("\n", $keterangan_text);
-    $keterangan_array = array_filter($keterangan_array, 'trim'); 
+if (isset($lab_detail['keterangan'])) {
+    $raw_keterangan = str_replace('\n', "\n", $lab_detail['keterangan']);
+    $keterangan_array = explode("\n", $raw_keterangan);
+    $keterangan_array = array_filter($keterangan_array, function($item) {
+        return !empty(trim($item));
+    });
 }
 
-// Process gambar
-$image_path = '';
-if (!empty($lab_detail['gambar'])) {
-    $images = explode(',', $lab_detail['gambar']);
-    $image_path = trim($images[0]);
+// --- Proses Gambar (Kolom di DB Lab bernama 'foto') ---
+$images = [];
+if (isset($lab_detail['foto']) && !empty($lab_detail['foto'])) {
+    // Asumsi jika ada multiple gambar dipisah koma, jika tidak, ambil langsung
+    $images = explode(',', $lab_detail['foto']);
+    $images = array_map('trim', $images);
+    $images = array_filter($images);
 }
 
-// Check availability
-$is_lab_available = !empty($lab_detail) && $lab_detail['id'] > 0;
+// --- Placeholder jika tidak ada gambar ---
+if (empty($images)) {
+    $images = ['default-lab.jpg']; // Ganti dengan placeholder default Anda
+}
 ?>
 
 <!DOCTYPE html>
@@ -97,6 +94,15 @@ $is_lab_available = !empty($lab_detail) && $lab_detail['id'] > 0;
             position: absolute; left: 0; top: 0;
             font-weight: 600; color: #f59e0b; /* Amber */
         }
+        /* Tambahan untuk Image Slider */
+        .img-nav {
+            background: rgba(0,0,0,.6); color: #fff;
+            padding: 0.5rem 0.75rem; border-radius: 9999px;
+            cursor: pointer; transition: background .2s;
+            position: absolute; top: 50%; transform: translateY(-50%);
+            z-index: 10;
+        }
+        .img-nav:hover { background: rgba(0,0,0,.8); }
     </style>
 </head>
 <body class="bg-blue-100 flex min-h-screen text-gray-800">
@@ -109,15 +115,15 @@ $is_lab_available = !empty($lab_detail) && $lab_detail['id'] > 0;
         <button class="bg-amber-500 hover:bg-amber-600 text-gray-900 p-2 rounded-lg transition-colors" onclick="toggleSidebar()">☰</button>
     </div>
 
-    <?php if (isset($error_message)): ?>
+    <?php if ($error_message): ?>
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 shadow-md" role="alert">
             ❌ <?= htmlspecialchars($error_message) ?>
             <div class="text-center pt-4">
                 <a href="datalaboratorium_admin.php" class="bg-gray-700 hover:bg-gray-800 text-white font-semibold px-4 py-2 rounded-lg inline-block transition-colors">← Kembali ke Data Laboratorium</a>
             </div>
         </div>
-    <?php elseif (!$is_lab_available): ?>
-        <div class="text-center p-16 text-gray-500 bg-white rounded-xl shadow-lg">⏳ Data Laboratorium tidak ditemukan.</div>
+    <?php elseif (empty($lab_detail)): ?>
+        <div class="text-center p-16 text-gray-500 bg-white rounded-xl shadow-lg">⏳ Memuat data laboratorium...</div>
     <?php else: ?>
     
     <div class="bg-white p-6 rounded-xl shadow-lg">
@@ -127,25 +133,41 @@ $is_lab_available = !empty($lab_detail) && $lab_detail['id'] > 0;
                 <a href="datalaboratorium_admin.php" class="bg-gray-700 hover:bg-gray-800 text-white p-3 rounded-lg transition-colors">←</a>
                 
                 <div>
-                    <h2 class="text-2xl font-bold text-gray-800">Detail Laboratorium: <?= htmlspecialchars($lab_detail['nama']) ?></h2>
-                    <p class="text-gray-500 text-sm">Informasi lengkap laboratorium</p>
+                    <h2 class="text-2xl font-bold text-gray-800">Detail Laboratorium</h2>
+                    <p class="text-gray-500 text-sm">Informasi lengkap laboratorium #<?= $lab_detail['id'] ?> (<?= $lab_detail['nama_fakultas'] ?>)</p>
                 </div>
             </div>
-            <a href="editlaboratorium_admin.php?id=<?= $lab_detail['id'] ?>" class="bg-amber-500 hover:bg-amber-600 text-gray-900 font-semibold px-6 py-3 rounded-lg shadow transition-colors w-full md:w-auto text-center">Edit Data</a>
+            <a href="editlaboratorium_admin.php?id=<?= $lab_detail['id'] ?>&source=<?= urlencode($source_table) ?>" class="bg-amber-500 hover:bg-amber-600 text-gray-900 font-semibold px-6 py-3 rounded-lg shadow transition-colors w-full md:w-auto text-center">Edit Data</a>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-4">
             
             <div class="space-y-6">
                 <div class="room-image relative w-full h-72 overflow-hidden rounded-xl bg-gray-100 flex items-center justify-center shadow-md">
-                    <?php if (!empty($lab_detail['gambar'])): ?>
-                        <img src="assets/images/<?= htmlspecialchars($image_path) ?>" 
+                    <?php if (count($images) > 1): ?>
+                        <button class="img-nav left-3" onclick="prevImage()">‹</button>
+                        <button class="img-nav right-3" onclick="nextImage()">›</button>
+                    <?php endif; ?>
+                    
+                    <?php if (!empty($images[0]) && $images[0] !== 'default-lab.jpg'): ?>
+                        <img id="roomImage" src="assets/images/<?= htmlspecialchars($images[0]) ?>" 
                              alt="<?= htmlspecialchars($lab_detail['nama']) ?>"
-                             class="w-full h-full object-cover rounded-xl"
+                             class="w-full h-full object-cover absolute inset-0"
                              onerror="this.parentElement.innerHTML='<div class=text-gray-500>Gambar tidak tersedia</div>'">
                     <?php else: ?>
                         <div class="text-gray-500 text-center">📷<br>Gambar Laboratorium<br>Tidak Tersedia</div>
                     <?php endif; ?>
+
+                    <div class="absolute top-4 right-4">
+                        <?php 
+                        $st = strtolower(str_replace(['_',' '], '', $lab_detail['status']));
+                        if ($st === 'tidaktersedia'): 
+                        ?>
+                            <span class="bg-red-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-md">Tidak Tersedia</span>
+                        <?php else: ?>
+                            <span class="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-md">Tersedia</span>
+                        <?php endif; ?>
+                    </div>
                 </div>
                 
                 <div class="room-details space-y-4">
@@ -162,33 +184,35 @@ $is_lab_available = !empty($lab_detail) && $lab_detail['id'] > 0;
                         </div>
                     </div>
                     
-                    <div class="detail-item">
-                        <label class="block font-semibold mb-1 text-sm text-gray-600">Lokasi</label>
-                        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 text-gray-800"><?= htmlspecialchars($lab_detail['lokasi']) ?></div>
-                    </div>
-                    <div class="detail-item">
-                        <label class="block font-semibold mb-1 text-sm text-gray-600">Fakultas</label>
-                        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 text-gray-800"><?= htmlspecialchars($lab_detail['fakultas']) ?></div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="detail-item">
+                            <label class="block font-semibold mb-1 text-sm text-gray-600">Lokasi</label>
+                            <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 text-gray-800"><?= htmlspecialchars($lab_detail['lokasi']) ?></div>
+                        </div>
+                        <div class="detail-item">
+                            <label class="block font-semibold mb-1 text-sm text-gray-600">Fakultas</label>
+                            <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 text-gray-800"><?= htmlspecialchars($lab_detail['nama_fakultas']) ?></div>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <div class="info-section space-y-6">
                 
-                <h3 class="text-xl font-semibold border-b pb-2 text-gray-700">Tarif Sewa</h3>
+                <h3 class="text-xl font-semibold border-b pb-2 text-gray-700">Informasi Tarif (Per Hari)</h3>
                 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div class="p-4 rounded-xl border border-amber-300 bg-amber-50">
                         <h4 class="text-base font-semibold text-gray-700 mb-2">🧪 Tarif Laboratorium</h4>
                         <div class="text-xl font-extrabold text-amber-700">
-                            Rp <?= number_format($lab_detail['tarif_laboratorium'], 0, ',', '.') ?> / <?= htmlspecialchars($lab_detail['satuan_laboratorium']) ?>
+                            Rp <?= number_format($lab_detail['tarif_sewa_laboratorium'] ?? 0, 0, ',', '.') ?>
                         </div>
                     </div>
 
                     <div class="p-4 rounded-xl border border-amber-300 bg-amber-50">
                         <h4 class="text-base font-semibold text-gray-700 mb-2">🛠️ Tarif Peralatan</h4>
                         <div class="text-xl font-extrabold text-amber-700">
-                            Rp <?= number_format($lab_detail['tarif_peralatan'], 0, ',', '.') ?> / <?= htmlspecialchars($lab_detail['satuan_peralatan']) ?>
+                            Rp <?= number_format($lab_detail['tarif_sewa_peralatan'] ?? 0, 0, ',', '.') ?>
                         </div>
                     </div>
                 </div>
@@ -212,13 +236,13 @@ $is_lab_available = !empty($lab_detail) && $lab_detail['id'] > 0;
                         <div class="metadata-item">
                             <label class="text-xs uppercase font-medium text-gray-500">Dibuat Pada</label>
                             <div class="font-medium text-gray-700">
-                                <?= date('d M Y, H:i', strtotime($lab_detail['created_at'])) ?> WIB
+                                <?= isset($lab_detail['created_at']) ? date('d M Y, H:i', strtotime($lab_detail['created_at'])) . ' WIB' : '-' ?>
                             </div>
                         </div>
                         <div class="metadata-item">
                             <label class="text-xs uppercase font-medium text-gray-500">Terakhir Diupdate</label>
                             <div class="font-medium text-gray-700">
-                                <?= date('d M Y, H:i', strtotime($lab_detail['updated_at'])) ?> WIB
+                                <?= isset($lab_detail['updated_at']) ? date('d M Y, H:i', strtotime($lab_detail['updated_at'])) . ' WIB' : '-' ?>
                             </div>
                         </div>
                     </div>
@@ -257,13 +281,13 @@ function toggleSidebar() {
     localStorage.setItem('sidebarStatus', is_expanded ? 'open' : 'collapsed');
 }
 
-// Initialization Sidebar State
-document.addEventListener('DOMContentLoaded', function() {
-    const sidebar = document.getElementById("sidebar");
+// Restore sidebar state on load
+document.addEventListener('DOMContentLoaded', () => {
+    const sidebar = document.getElementById('sidebar');
     const main = document.getElementById('mainContent');
-    const storedStatus = localStorage.getItem('sidebarStatus');
-
-    if (storedStatus === 'open') {
+    const status = localStorage.getItem('sidebarStatus');
+    
+    if (status === 'open') {
         sidebar.classList.add('w-60');
         sidebar.classList.remove('w-16');
         main.classList.add('ml-60');
@@ -275,6 +299,54 @@ document.addEventListener('DOMContentLoaded', function() {
         main.classList.add('ml-16');
     }
 });
+
+
+// Image Slider functionality
+<?php if (count($images) > 1): ?>
+let currentImg = 0;
+const images = <?= json_encode($images) ?>;
+const imgTag = document.getElementById("roomImage");
+
+function updateImage(){
+    if(imgTag) {
+        // Hapus path assets/images/ jika sudah ada di database, untuk menghindari double path
+        let imageName = images[currentImg];
+        // Normalisasi jika di database tersimpan full path atau cuma nama file
+        if (!imageName.includes('assets/images/')) {
+            imageName = 'assets/images/' + imageName;
+        }
+        
+        imgTag.src = imageName;
+        imgTag.alt = '<?= htmlspecialchars($lab_detail['nama']) ?> - Gambar ' + (currentImg + 1);
+    }
+}
+
+function prevImage(){
+    currentImg = (currentImg - 1 + images.length) % images.length;
+    updateImage();
+}
+
+function nextImage(){
+    currentImg = (currentImg + 1) % images.length;
+    updateImage();
+}
+<?php endif; ?>
+
+// Keyboard navigation
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        window.location.href = 'datalaboratorium_admin.php';
+    }
+    <?php if (count($images) > 1): ?>
+    else if (e.key === 'ArrowLeft') {
+        prevImage();
+    }
+    else if (e.key === 'ArrowRight') {
+        nextImage();
+    }
+    <?php endif; ?>
+});
 </script>
+
 </body>
 </html>

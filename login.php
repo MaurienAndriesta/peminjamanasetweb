@@ -1,13 +1,13 @@
 <?php
+ob_start(); // Mencegah error header location
 session_start();
 include 'koneksi.php'; 
 
-// 🔹 Cek apakah sudah ada super_admin di database
+// 🔹 Cek & Buat Super Admin Default (Fitur Safety)
 $cekSuperAdmin = $koneksi->query("SELECT COUNT(*) AS total FROM tbl_user WHERE role = 'super_admin'");
 $dataAdmin = $cekSuperAdmin->fetch_assoc();
 
 if ($dataAdmin['total'] == 0) {
-    // Kalau belum ada super admin, buat default akun
     $fullname = "Super Admin ITPLN";
     $email = "superadmin@itpln.ac.id";
     $passwordHash = password_hash("password", PASSWORD_DEFAULT);
@@ -15,18 +15,16 @@ if ($dataAdmin['total'] == 0) {
 
     $insertAdmin = $koneksi->prepare("INSERT INTO tbl_user (fullname, email, password, role) VALUES (?, ?, ?, ?)");
     $insertAdmin->bind_param("ssss", $fullname, $email, $passwordHash, $role);
-
     $insertAdmin->execute();
 }
 
-
-
-// 🔹 Proses login
+// 🔹 Proses Login
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $email = $_POST['email'] ?? '';
-    $password = $_POST['password'] ?? '';
+    $email = trim($_POST['email'] ?? '');
+    $password = trim($_POST['password'] ?? '');
     $error = '';
 
+    // Ambil data user
     $stmt = $koneksi->prepare("SELECT * FROM tbl_user WHERE email = ?");
     $stmt->bind_param("s", $email);
     $stmt->execute();
@@ -36,20 +34,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $result->fetch_assoc();
 
         if (password_verify($password, $user['password'])) {
-             // Simpan session yang seragam
-              $_SESSION['user_id'] = $user['id'];      // Wajib pakai ini
-              $_SESSION['fullname'] = $user['fullname'];
-              $_SESSION['role'] = $user['role'];
+            
+            // Ambil Role User (Bersihkan spasi & huruf kecil)
+            $role = strtolower(trim($user['role'])); 
 
-            // 🔸 Redirect sesuai role
-             if ($user['role'] === 'super_admin') {
-        header("Location: superadmin/dashboard.php");
-    } elseif ($user['role'] === 'admin') {
-        header("Location: admin/dashboardadmin.php");
-    } else {
-        header("Location: users/dashboarduser.php");
-    }
-    exit;
+            // ============================================================
+            // 🔥 LOGIKA MODE PERBAIKAN (MAINTENANCE) - REVISI 🔥
+            // ============================================================
+            
+            // 1. Cek Status Maintenance dari Database
+            $is_maintenance = '0'; 
+            $q_maint = $koneksi->query("SELECT nilai FROM tbl_pengaturan WHERE kunci = 'maintenance_mode'");
+            if ($q_maint && $q_maint->num_rows > 0) {
+                $is_maintenance = $q_maint->fetch_assoc()['nilai'];
+            }
+
+            // 2. LOGIKA BARU:
+            // Blokir JIKA Maintenance Aktif (1) 
+            // DAN Role BUKAN 'super_admin' 
+            // DAN Role BUKAN 'admin'
+            // (Artinya hanya User biasa yang diblokir)
+            
+            if ($is_maintenance == '1' && $role !== 'super_admin' && $role !== 'admin') {
+                $error = "⚠️ <b>SISTEM DALAM PERBAIKAN</b><br>Mohon maaf, saat ini hanya Admin yang dapat login.";
+            } 
+            else {
+                // === LOGIN BERHASIL (LANJUTKAN) ===
+                
+                session_regenerate_id(true);
+
+                $_SESSION['user_id'] = $user['id'];
+                $_SESSION['fullname'] = $user['fullname'];
+                $_SESSION['role'] = $user['role'];
+
+                // Redirect Berdasarkan Role
+                if ($role === 'super_admin') {
+                    header("Location: superadmin/dashboardsuper.php");
+                } 
+                elseif ($role === 'admin') {
+                    header("Location: admin/dashboardadmin.php");
+                } 
+                elseif ($role === 'user') {
+                    header("Location: users/dashboarduser.php");
+                } 
+                else {
+                    // Default ke user jika role tidak dikenal
+                    header("Location: users/dashboarduser.php");
+                }
+                exit;
+            }
+            // ============================================================
+
         } else {
             $error = "Password salah!";
         }
@@ -138,14 +173,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     .form-box button:hover {background:#2c3e50;color:#fff;}
     .form-box .extra {margin-top:15px;text-align:center;}
-    .error {color:red;font-size:14px;text-align:center;margin-top:10px;}
+    
+    /* Style Error */
+    .error {
+        background-color: #ffe6e6;
+        color: #d63031;
+        border: 1px solid #fab1a0;
+        padding: 10px;
+        border-radius: 8px;
+        font-size:13px;
+        text-align:center;
+        margin-top:15px;
+        line-height: 1.5;
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="left"></div>
+    <div class="left">
+    </div>
     <div class="right">
-      <img src="pln.png" alt="Logo IT-PLN">
+      <img src="pln.png" alt="Logo IT-PLN"> 
       <div class="form-box">
         <h2>Login</h2>
         <form method="POST">
@@ -153,7 +201,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <input type="password" name="password" placeholder="Password" required>
           <button type="submit">Login</button>
           <div class="extra">
-            <a href="register.php">Belum punya akun? Register sekarang!</a>
+            <a href="register.php" style="text-decoration:none; color:#555; font-size:14px;">Belum punya akun? Register sekarang!</a>
           </div>
         </form>
         <?php if (!empty($error)): ?>

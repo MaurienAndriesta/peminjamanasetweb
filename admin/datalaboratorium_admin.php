@@ -15,7 +15,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])
         exit;
     }
 
-    // Ambil nama file foto bila ada, sebelum delete
+    // 1. Cek Gambar
     $foto = null;
     $stmt = $db->prepare("SELECT foto FROM `$source` WHERE id = ?");
     if ($stmt) {
@@ -28,28 +28,35 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])
         $stmt->close();
     }
 
-    // Hapus record
-    $stmt = $db->prepare("DELETE FROM `$source` WHERE id = ?");
-    if ($stmt) {
-        $stmt->bind_param('i', $del_id);
-        if ($stmt->execute()) {
-            $stmt->close();
-            // Hapus file foto jika ada (path relatif sesuai implementasi)
-            if (!empty($foto)) {
-                $p = __DIR__ . '/../assets/images/' . $foto;
-                if (file_exists($p)) @unlink($p);
+    // 2. Hapus Data dengan Try-Catch
+    try {
+        $stmt = $db->prepare("DELETE FROM `$source` WHERE id = ?");
+        if ($stmt) {
+            $stmt->bind_param('i', $del_id);
+            if ($stmt->execute()) {
+                $stmt->close();
+                
+                // Hapus file fisik jika ada
+                if (!empty($foto)) {
+                    $p = __DIR__ . '/assets/images/' . $foto;
+                    if (!file_exists($p)) $p = 'assets/images/' . $foto;
+                    if (file_exists($p)) @unlink($p);
+                }
+                
+                header("Location: datalaboratorium_admin.php?status=deleted");
+                exit;
+            } else {
+                throw new Exception($stmt->error);
             }
-            header("Location: datalaboratorium_admin.php?status=deleted");
-            exit;
         } else {
-            $err = $stmt->error;
-            $stmt->close();
-            header("Location: datalaboratorium_admin.php?status=error&msg=" . urlencode("Gagal menghapus: $err"));
-            exit;
+            throw new Exception("Kesalahan SQL Prepare");
         }
-    } else {
-        header("Location: datalaboratorium_admin.php?status=error&msg=" . urlencode("Kesalahan SQL: " . $db->error));
-        exit;
+    } catch (Exception $e) {
+        if (strpos($e->getMessage(), 'foreign key constraint') !== false) {
+            $error_message = "Gagal menghapus! Laboratorium ini sedang digunakan dalam riwayat peminjaman.";
+        } else {
+            $error_message = "Gagal menghapus: " . $e->getMessage();
+        }
     }
 }
 
@@ -57,7 +64,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])
 // INIT & VARIABLE
 // ========================
 $success_message = null;
-$error_message = null;
+if (!isset($error_message)) $error_message = null;
 
 $limit = 10;
 $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
@@ -89,7 +96,8 @@ $union_query = "
 // ========================
 // FILTER
 // ========================
-$where_clauses = ["status = 'tersedia'"];
+$where_clauses = ["1=1"];
+
 if ($search !== '') {
     $where_clauses[] = "nama LIKE ?";
     $params[] = "%$search%";
@@ -111,7 +119,6 @@ if (!$stmt) {
     $error_message = "Kesalahan SQL (count prepare): " . $db->error;
 } else {
     if (!empty($params)) {
-        // bind params dynamically
         $bind_names = [];
         $bind_names[] = $param_types;
         foreach ($params as $k => $v) $bind_names[] = &$params[$k];
@@ -143,9 +150,7 @@ if (!$stmt) {
     $error_message = "Kesalahan SQL (data prepare): " . $db->error;
     $laboratorium_data = [];
 } else {
-    // build types
     $types = $param_types . 'ii';
-    // bind dynamic
     $bind_values = [];
     $bind_values[] = $types;
     foreach ($params_with_paging as $k => $v) $bind_values[] = &$params_with_paging[$k];
@@ -160,11 +165,10 @@ if (!$stmt) {
     $stmt->close();
 }
 
-// === Routing halaman edit / detail
 $editPage   = "editlaboratorium_admin.php";
 $detailPage = "detaillaboratorium_admin.php";
-
 ?>
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -174,202 +178,265 @@ $detailPage = "detaillaboratorium_admin.php";
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { 
-            font-family: 'Poppins', sans-serif; 
+        body { font-family: 'Poppins', sans-serif; background-color: #ffffff; overflow-x: hidden; }
+        .text-dark-accent { color: #1e293b; }
+
+        .main { transition: margin-left 0.3s ease-in-out; }
+        @media (min-width: 1024px) { .main { margin-left: 16rem; } }
+        @media (max-width: 1023px) { .main { margin-left: 0 !important; } }
+
+        #sidebar { position: fixed; z-index: 50; top: 0; left: 0; height: 100%; box-shadow: 4px 0 24px rgba(0,0,0,0.1); }
+        #sidebar.lg\:w-16 .sidebar-text { display: none; }
+        #sidebar.lg\:w-60 .sidebar-text { display: inline; }
+        @media (max-width: 1023px) { .sidebar-text { display: inline !important; } }
+
+        .header-panel {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border-radius: 1rem;
+            z-index: 40;
         }
-        .text-dark-accent { color: #202938; }
-        @media (min-width: 1024px) {
-            .main { margin-left: 4rem; }
-            .main.lg\:ml-60 { margin-left: 15rem; }
+
+        .content-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border-radius: 1.5rem;
         }
+
+        .animate-fade-in { animation: fadeIn 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body class="bg-blue-100 min-h-screen">
 
+<div id="sidebarOverlay" class="fixed inset-0 bg-black/60 hidden lg:hidden z-40" onclick="toggleSidebar()"></div>
+
 <?php include 'sidebar_admin.php'; ?>
 
-<div id="sidebarOverlay" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden lg:hidden"></div>
-
-<div id="mainContent" class="main flex-1 p-3 sm:p-5 transition-all duration-300 lg:ml-16 min-h-screen">
+<div id="mainContent" class="main flex-1 p-6 lg:p-10 min-h-screen relative z-10">
     
-    <div class="flex justify-between items-center mb-4 sm:mb-6">
-        <button id="toggleBtn" class="bg-amber-500 hover:bg-amber-600 text-gray-900 p-2 rounded-lg transition-colors shadow-md relative z-50" onclick="toggleSidebar()">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-            </svg>
-        </button>
-        
-        <div class="text-sm text-gray-600 hidden sm:block">
-            <span class="font-semibold">Data Laboratorium</span>
-        </div>
-    </div>
+    <!-- HEADER PANEL -->
+    <div class="header-panel p-4 mb-10 sticky top-4 z-50 flex flex-col xl:flex-row justify-between items-center gap-4 transition-all duration-300">
+        <div class="flex items-center gap-4 w-full xl:w-auto">
+            <button id="toggleBtn" onclick="toggleSidebar()" class="bg-amber-500 text-white p-2.5 rounded-xl shadow-lg hover:bg-amber-600 active:scale-95 transition-all flex-shrink-0">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+            </button>
 
-    <?php if (isset($_GET['status']) && $_GET['status'] === 'deleted'): ?>
-        <div class="bg-green-100 border border-green-400 text-green-700 px-3 sm:px-4 py-3 rounded-lg mb-4 shadow-md text-sm">Data berhasil dihapus permanen.</div>
-    <?php elseif (isset($_GET['status']) && $_GET['status'] === 'error'): ?>
-        <div class="bg-red-100 border border-red-400 text-red-700 px-3 sm:px-4 py-3 rounded-lg mb-4 shadow-md text-sm">❌ <?= htmlspecialchars($_GET['msg'] ?? 'Terjadi kesalahan') ?></div>
-    <?php endif; ?>
-
-    <?php if ($error_message): ?>
-        <div class="bg-red-100 border border-red-400 text-red-700 px-3 sm:px-4 py-3 rounded-lg mb-4 shadow-md text-sm">❌ <?= htmlspecialchars($error_message) ?></div>
-    <?php endif; ?>
-
-    <div class="bg-white p-4 sm:p-6 rounded-xl shadow-lg">
-        <div class="mb-4 sm:mb-6">
-            <h1 class="text-xl sm:text-2xl font-bold text-dark-accent flex items-center gap-2">
-                <span class="text-2xl sm:text-3xl">🔬</span>
-                <span>Data Laboratorium</span>
-            </h1>
-            <p class="text-xs sm:text-sm text-gray-600 mt-1">Kelola data laboratorium kampus</p>
-        </div>
-        
-        <div class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center mb-4 sm:mb-6 gap-3">
-            <a href="tambahlaboratorium_admin.php" 
-                class="bg-amber-500 hover:bg-amber-600 text-gray-900 font-semibold px-4 py-2 rounded-lg shadow-md transition-all hover:shadow-lg text-sm inline-flex items-center justify-center gap-1.5 w-auto">
-                <span>➕</span>
-                <span>Tambah Data</span>
-            </a>
-            
-            <div class="flex flex-col sm:flex-row gap-3 flex-1 sm:max-w-2xl">
-                <form method="GET" class="flex-1">
+            <!-- Combined Filter Form -->
+            <form method="get" class="flex flex-col md:flex-row gap-3 w-full xl:w-[32rem]">
+                <!-- Select Fakultas -->
+                <div class="relative md:w-1/3">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500 pointer-events-none">
+                        <i class="fas fa-filter text-sm"></i>
+                    </span>
                     <select name="fakultas" onchange="this.form.submit()"
-                            class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all text-sm">
-                        <option value="">🏫 Semua Fakultas</option>
+                        class="w-full pl-8 pr-1 py-2.5 bg-gray-50 border border-gray-200 rounded-full text-sm font-medium focus:ring-4 focus:ring-blue-200/50 transition-all outline-none shadow-sm cursor-pointer appearance-none">
+                        <option value="">Semua Fakultas</option>
                         <option value="FTBE" <?= $fakultas=='FTBE'?'selected':'' ?>>FTBE</option>
                         <option value="FTEN" <?= $fakultas=='FTEN'?'selected':'' ?>>FTEN</option>
                         <option value="FTIK" <?= $fakultas=='FTIK'?'selected':'' ?>>FTIK</option>
                         <option value="FKET" <?= $fakultas=='FKET'?'selected':'' ?>>FKET</option>
                     </select>
-                    <input type="hidden" name="search" value="<?= htmlspecialchars($search) ?>">
-                    <input type="hidden" name="page" value="1">
-                </form>
-                
-                <form method="GET" class="relative flex-1">
-                    <input type="text" name="search" id="searchInput"
-                           class="w-full px-4 py-2 pr-10 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all text-sm"
-                           placeholder="🔍 Cari laboratorium..." value="<?= htmlspecialchars($search) ?>">
+                    <span class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-400">
+                        <i class="fas fa-chevron-down text-xs"></i>
+                    </span>
+                </div>
+
+                <!-- Search Input -->
+                <div class="relative flex-1">
+                    <span class="absolute inset-y-0 left-0 pl-4 flex items-center text-blue-500">
+                        <i class="fas fa-search text-lg"></i>
+                    </span>
+                    <input type="text" name="search" placeholder="Cari Laboratorium..." value="<?= htmlspecialchars($search) ?>" 
+                        class="w-full pl-12 pr-10 py-2.5 bg-white border border-gray-200 rounded-full text-sm font-medium focus:ring-4 focus:ring-blue-200/50 transition-all outline-none shadow-sm placeholder-gray-400">
                     <?php if (!empty($search)): ?>
-                        <button type="button" id="searchClearBtn"
-                                class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 text-2xl font-bold">&times;</button>
+                        <button type="button" onclick="window.location='datalaboratorium_admin.php?fakultas=<?= urlencode($fakultas) ?>'" 
+                            class="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
                     <?php endif; ?>
-                    <input type="hidden" name="fakultas" value="<?= htmlspecialchars($fakultas) ?>">
-                    <input type="hidden" name="page" value="1">
-                </form>
-            </div>
+                </div>
+                <input type="hidden" name="page" value="1">
+            </form>
         </div>
 
-        <div class="bg-white rounded-xl overflow-hidden shadow-md border border-gray-200">
+        <a href="tambahlaboratorium_admin.php" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2.5 rounded-xl shadow-md transition-all flex items-center gap-2 w-full md:w-auto justify-center">
+            <i class="fas fa-plus"></i> <span>Tambah Data</span>
+        </a>
+    </div>
+
+    <!-- ALERTS -->
+    <?php if (isset($_GET['status']) && $_GET['status'] === 'deleted'): ?>
+        <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-xl mb-6 shadow-sm animate-fade-in flex items-center gap-3" id="successAlert">
+            <i class="fas fa-check-circle text-xl"></i>
+            <span>✅ Data berhasil dihapus permanen.</span>
+        </div>
+    <?php elseif (isset($_GET['status']) && $_GET['status'] === 'error'): ?>
+        <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6 shadow-sm animate-fade-in flex items-center gap-3">
+            <i class="fas fa-exclamation-triangle text-xl"></i>
+            <span>❌ <?= htmlspecialchars($_GET['msg'] ?? 'Terjadi kesalahan') ?></span>
+        </div>
+    <?php endif; ?>
+
+    <?php if ($error_message): ?>
+        <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6 shadow-sm animate-fade-in flex items-center gap-3">
+            <i class="fas fa-exclamation-circle text-xl"></i>
+            <span>❌ <?= htmlspecialchars($error_message) ?></span>
+        </div>
+    <?php endif; ?>
+
+    <!-- PAGE TITLE -->
+    <div class="mb-6 animate-fade-in">
+        <h1 class="text-3xl font-extrabold text-slate-800">Data Laboratorium</h1>
+        <p class="text-slate-500 mt-1">Kelola data laboratorium dari berbagai fakultas.</p>
+    </div>
+
+    <!-- CONTENT CARD -->
+    <div class="content-card p-6 animate-fade-in">
+        
+        <!-- Desktop Table -->
+        <div class="hidden lg:block overflow-x-auto">
             <?php if (empty($laboratorium_data)): ?>
-                <div class="text-center p-8 sm:p-16">
-                    <div class="text-5xl sm:text-6xl mb-3 sm:mb-4">📂</div>
-                    <?php if (!empty($search) || !empty($fakultas)): ?>
-                        <h3 class="text-lg sm:text-xl font-bold text-gray-700 mb-2">Tidak ada laboratorium ditemukan</h3>
-                        <p class="text-sm sm:text-base text-gray-600 mb-4">Coba ubah kata kunci atau pilihan fakultas</p>
-                        <a href="datalaboratorium_admin.php" class="bg-amber-500 hover:bg-amber-600 text-gray-900 font-semibold px-4 sm:px-6 py-2 sm:py-3 rounded-lg inline-block transition-colors shadow-md text-sm sm:text-base">Tampilkan Semua Data</a>
-                    <?php else: ?>
-                        <h3 class="text-lg sm:text-xl font-bold text-gray-700 mb-2">Belum ada data laboratorium</h3>
-                        <p class="text-sm sm:text-base text-gray-600 mb-4">Tambahkan laboratorium pertama Anda</p>
-                        <a href="tambahlaboratorium_admin.php" class="bg-amber-500 hover:bg-amber-600 text-gray-900 font-semibold px-4 sm:px-6 py-2 sm:py-3 rounded-lg inline-block transition-colors shadow-md text-sm sm:text-base">➕ Tambah Laboratorium</a>
-                    <?php endif; ?>
+                <div class="text-center p-8">
+                    <p class="text-gray-600">📂 Belum ada data laboratorium ditemukan.</p>
                 </div>
             <?php else: ?>
-                <div class="hidden lg:block overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-700 text-white">
-                            <tr>
-                                <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">No.</th>
-                                <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Nama Laboratorium</th>
-                                <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Kapasitas</th>
-                                <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Fakultas</th>
-                                <th class="px-4 py-3 text-center text-xs font-bold uppercase tracking-wider">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            <?php $no = $offset + 1; foreach($laboratorium_data as $lab): ?>
-                            <tr class="hover:bg-gray-50 transition-colors">
-                                <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-700"><?= $no ?>.</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900"><?= htmlspecialchars($lab['nama']) ?></td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm"><span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">👥 <?= htmlspecialchars($lab['kapasitas']) ?></span></td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700"><span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">🏫 <?= htmlspecialchars($lab['fakultas']) ?></span></td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm">
-                                    <div class="flex gap-2 justify-center">
-                                        <a href="<?= $editPage ?>?id=<?= $lab['id'] ?>&source=<?= urlencode($lab['source_table'] ?? '') ?>" class="inline-flex items-center px-3 py-1.5 text-xs font-bold rounded-lg bg-green-500 hover:bg-green-600 text-white transition-all shadow-sm">✏️ Edit</a>
-                                        <a href="<?= $detailPage ?>?id=<?= $lab['id'] ?>&source=<?= urlencode($lab['source_table'] ?? '') ?>" class="inline-flex items-center px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition-all shadow-sm">👁️ Detail</a>
-                                        <button onclick="confirmDelete(<?= (int)$lab['id'] ?>, '<?= htmlspecialchars($lab['source_table']) ?>')" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs">🗑️ Hapus</button>
-                                    </div>
-                                </td>
-                            </tr>
-                            <?php $no++; endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="lg:hidden space-y-4 p-3">
-                    <?php $no = $offset + 1; foreach($laboratorium_data as $lab): ?>
-                    <div class="bg-white border-2 border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
-                        <div class="flex justify-between items-start mb-3">
-                            <div class="flex-1">
-                                <div class="text-xs text-gray-500 mb-1">No. <?= $no ?></div>
-                                <h3 class="font-bold text-base text-gray-900 mb-2"><?= htmlspecialchars($lab['nama']) ?></h3>
-                            </div>
-                        </div>
-                        <div class="space-y-2 mb-3">
-                            <div class="flex flex-wrap items-center gap-2 text-sm">
-                                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">👥 <?= htmlspecialchars($lab['kapasitas']) ?></span>
-                                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">🏫 <?= htmlspecialchars($lab['fakultas']) ?></span>
-                            </div>
-                        </div>
-                        <div class="flex gap-2">
-                            <a href="<?= $editPage ?>?id=<?= $lab['id'] ?>&source=<?= urlencode($lab['source_table'] ?? '') ?>" class="flex-1 text-center px-3 py-2 text-xs font-bold rounded-lg bg-green-500 hover:bg-green-600 text-white transition-all">✏️ Edit</a>
-                            <a href="<?= $detailPage ?>?id=<?= $lab['id'] ?>&source=<?= urlencode($lab['source_table'] ?? '') ?>" class="flex-1 text-center px-3 py-2 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition-all">👁️ Detail</a>
-                            <button onclick="confirmDelete(<?= (int)$lab['id'] ?>, '<?= htmlspecialchars($lab['source_table']) ?>')" class="flex-1 px-3 py-2 text-xs font-bold rounded-lg bg-red-500 hover:bg-red-600 text-white transition-all">🗑️</button>
-                        </div>
-                    </div>
-                    <?php $no++; endforeach; ?>
-                </div>
+                <table class="min-w-full border-collapse border border-gray-200 text-sm">
+                    <thead class="bg-gray-800 text-white">
+                        <tr>
+                            <th class="px-3 py-3 border-b border-gray-300 text-left text-xs font-bold uppercase tracking-wider w-10">No.</th>
+                            <th class="px-3 py-3 border-b border-gray-300 text-left text-xs font-bold uppercase tracking-wider">Nama Laboratorium</th>
+                            <th class="px-3 py-3 border-b border-gray-300 text-left text-xs font-bold uppercase tracking-wider">Kapasitas</th>
+                            <th class="px-3 py-3 border-b border-gray-300 text-left text-xs font-bold uppercase tracking-wider">Fakultas</th>
+                            <th class="px-3 py-3 border-b border-gray-300 text-center text-xs font-bold uppercase tracking-wider w-48">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <?php $no = $offset + 1; foreach($laboratorium_data as $lab): 
+                            $status_raw = strtolower(str_replace(['_', ' '], '', $lab['status']));
+                            $is_unavailable = ($status_raw === 'tidaktersedia');
+                        ?>
+                        <tr class="hover:bg-gray-50 transition-colors <?= $is_unavailable ? 'bg-gray-100' : '' ?>">
+                            <td class="px-3 py-3 whitespace-nowrap text-sm font-bold text-gray-700 text-center"><?= $no++ ?>.</td>
+                            <td class="px-3 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                <?= htmlspecialchars($lab['nama']) ?>
+                                <?php if($is_unavailable): ?>
+                                    <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-800 border border-red-200">
+                                        Tidak Tersedia
+                                    </span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="px-3 py-3 whitespace-nowrap text-sm">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    👥 <?= htmlspecialchars($lab['kapasitas']) ?>
+                                </span>
+                            </td>
+                            <td class="px-3 py-3 whitespace-nowrap text-sm">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                    🏫 <?= htmlspecialchars($lab['fakultas']) ?>
+                                </span>
+                            </td>
+                            <td class="px-3 py-3 whitespace-nowrap text-center text-sm font-medium">
+                                <div class="flex justify-center gap-1">
+                                    <a href="<?= $editPage ?>?id=<?= $lab['id'] ?>&source=<?= urlencode($lab['source_table'] ?? '') ?>" 
+                                       class="inline-flex items-center px-2 py-1 bg-green-500 hover:bg-green-600 text-white text-xs font-bold rounded shadow-sm">
+                                        ✏️ Edit
+                                    </a>
+                                    <a href="<?= $detailPage ?>?id=<?= $lab['id'] ?>&source=<?= urlencode($lab['source_table'] ?? '') ?>" 
+                                       class="inline-flex items-center px-2 py-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded shadow-sm">
+                                        👁️ Detail
+                                    </a>
+                                    <button onclick="confirmDelete(<?= (int)$lab['id'] ?>, '<?= htmlspecialchars($lab['source_table']) ?>')" 
+                                            class="inline-flex items-center px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded shadow-sm">
+                                        🗑️ Hapus
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
             <?php endif; ?>
         </div>
 
-        <?php if (!empty($total_pages) && $total_pages > 1): ?>
-        <div class="flex flex-wrap justify-center gap-2 mt-6">
+        <!-- Mobile View (Cards) -->
+        <div class="lg:hidden space-y-4 mt-2">
+            <?php if (empty($laboratorium_data)): ?>
+                <div class="text-center p-8">
+                    <p class="text-gray-600">📂 Belum ada data laboratorium.</p>
+                </div>
+            <?php else: ?>
+                <?php $no = $offset + 1; foreach($laboratorium_data as $lab): 
+                    $status_raw = strtolower(str_replace(['_', ' '], '', $lab['status']));
+                    $is_unavailable = ($status_raw === 'tidaktersedia');
+                ?>
+                <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm <?= $is_unavailable ? 'bg-gray-100' : '' ?>">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex-1">
+                            <div class="text-xs text-gray-500 mb-1">No. <?= $no++ ?></div>
+                            <h3 class="font-bold text-base text-gray-900 mb-2">
+                                <?= htmlspecialchars($lab['nama']) ?>
+                                <?php if($is_unavailable): ?>
+                                    <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                                        Tidak Tersedia
+                                    </span>
+                                <?php endif; ?>
+                            </h3>
+                        </div>
+                    </div>
+                    <div class="space-y-2 mb-3">
+                        <div class="flex flex-wrap items-center gap-2 text-sm">
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                👥 <?= htmlspecialchars($lab['kapasitas']) ?>
+                            </span>
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                🏫 <?= htmlspecialchars($lab['fakultas']) ?>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <a href="<?= $editPage ?>?id=<?= $lab['id'] ?>&source=<?= urlencode($lab['source_table'] ?? '') ?>" class="flex-1 text-center bg-green-500 text-white px-3 py-2 rounded-md text-xs font-bold shadow-sm">Edit</a>
+                        <a href="<?= $detailPage ?>?id=<?= $lab['id'] ?>&source=<?= urlencode($lab['source_table'] ?? '') ?>" class="flex-1 text-center bg-amber-500 text-white px-3 py-2 rounded-md text-xs font-bold shadow-sm">Detail</a>
+                        <button onclick="confirmDelete(<?= (int)$lab['id'] ?>, '<?= htmlspecialchars($lab['source_table']) ?>')" class="flex-1 bg-red-500 text-white px-3 py-2 rounded-md text-xs font-bold shadow-sm">Hapus</button>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+
+        <!-- Pagination -->
+        <?php if ($total_pages > 1): ?>
+        <div class="flex justify-center gap-2 mt-4 text-sm">
             <?php 
             $base_url = "search=".urlencode($search)."&fakultas=".urlencode($fakultas);
             if ($page > 1): ?>
-                <a href="?page=<?= $page-1 ?>&<?= $base_url ?>" class="px-3 sm:px-4 py-2 rounded-lg bg-gray-700 text-white hover:bg-gray-800 transition-colors text-sm">‹ Sebelumnya</a>
-            <?php else: ?>
-                <span class="px-3 sm:px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm">‹ Sebelumnya</span>
+                <a href="?page=<?= $page-1 ?>&<?= $base_url ?>" class="px-3 py-1 bg-gray-700 text-white rounded-md">‹</a>
             <?php endif; ?>
-
-            <?php for($i=max(1,$page-2); $i<=min($total_pages,$page+2); $i++): ?>
-                <?php if ($i==$page): ?>
-                    <span class="px-3 sm:px-4 py-2 rounded-lg bg-amber-500 text-gray-900 font-semibold text-sm"><?= $i ?></span>
-                <?php else: ?>
-                    <a href="?page=<?= $i ?>&<?= $base_url ?>" class="px-3 sm:px-4 py-2 rounded-lg bg-gray-700 text-white hover:bg-gray-800 transition-colors text-sm"><?= $i ?></a>
-                <?php endif; ?>
+            <?php for ($i = 1; $i <= $total_pages; $i++): ?>
+                <a href="?page=<?= $i ?>&<?= $base_url ?>" 
+                   class="px-3 py-1 rounded-md <?= $i == $page ? 'bg-amber-500 text-gray-900 font-bold' : 'bg-gray-200 text-gray-700 hover:bg-gray-300' ?>">
+                   <?= $i ?>
+                </a>
             <?php endfor; ?>
-
-            <?php if ($page<$total_pages): ?>
-                <a href="?page=<?= $page+1 ?>&<?= $base_url ?>" class="px-3 sm:px-4 py-2 rounded-lg bg-gray-700 text-white hover:bg-gray-800 transition-colors text-sm">Selanjutnya ›</a>
-            <?php else: ?>
-                <span class="px-3 sm:px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm">Selanjutnya ›</span>
+            <?php if ($page < $total_pages): ?>
+                <a href="?page=<?= $page+1 ?>&<?= $base_url ?>" class="px-3 py-1 bg-gray-700 text-white rounded-md">›</a>
             <?php endif; ?>
-        </div>
-
-        <div class="text-gray-500 text-xs sm:text-sm mt-3 text-center">
-            Menampilkan <strong><?= count($laboratorium_data) ?></strong> dari <strong><?= $total_records ?? 0 ?></strong> total data
-            <?= !empty($search) ? '(hasil pencarian: "'.htmlspecialchars($search).'")' : '' ?>
-            <?= !empty($fakultas) ? '(fakultas: '.htmlspecialchars($fakultas).')' : '' ?>
         </div>
         <?php endif; ?>
     </div>
 </div>
 
 <script>
+// Fungsi Sidebar (Konsisten dengan datafasilitas)
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     const main = document.getElementById('mainContent');
     const overlay = document.getElementById('sidebarOverlay');
+    const toggleBtn = document.getElementById('toggleBtn'); 
     const is_desktop = window.innerWidth >= 1024;
 
     if (is_desktop) {
@@ -377,30 +444,43 @@ function toggleSidebar() {
         sidebar.classList.toggle('lg:w-16');
         main.classList.toggle('lg:ml-60');
         main.classList.toggle('lg:ml-16');
+        
+        const is_expanded = sidebar.classList.contains('lg:w-60');
+        if (is_expanded) {
+            toggleBtn.style.left = '16rem'; 
+        } else {
+            toggleBtn.style.left = '5rem'; 
+        }
     } else {
         sidebar.classList.toggle('translate-x-0');
         sidebar.classList.toggle('-translate-x-full');
-        overlay.classList.toggle('hidden');
+        if (overlay) {
+            overlay.classList.toggle('hidden');
+        }
     }
 
     const is_expanded = sidebar.classList.contains('lg:w-60') || sidebar.classList.contains('translate-x-0');
+    
+    if (typeof updateSidebarVisibility === 'function') {
+        updateSidebarVisibility(is_expanded);
+    }
+    
     localStorage.setItem('sidebarStatus', is_expanded ? 'open' : 'collapsed');
 }
 
+// Konfirmasi Hapus
 function confirmDelete(id, source) {
-    
     Swal.fire({
-        title: 'Hapus permanen data?',
-        text: 'Aksi ini akan menghapus data dari database dan file (jika ada). Tindakan ini tidak dapat dibatalkan.',
+        title: 'Hapus permanen?', 
+        text: 'Data akan dihapus permanen!', 
         icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d9534f',
-        cancelButtonColor: '#6b7280',
-        confirmButtonText: 'Ya, Hapus Permanen',
+        showCancelButton: true, 
+        confirmButtonColor: '#d9534f', 
+        cancelButtonColor: '#f59e0b',
+        confirmButtonText: 'Hapus', 
         cancelButtonText: 'Batal'
     }).then((result) => {
         if (result.isConfirmed) {
-            // Redirect dengan parameter source agar server tahu dari tabel mana dihapus
             const url = new URL(window.location.href);
             url.searchParams.set('action', 'delete');
             url.searchParams.set('id', id);
@@ -410,20 +490,68 @@ function confirmDelete(id, source) {
     });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    const clearBtn = document.getElementById('searchClearBtn');
-    if (clearBtn) {
-        clearBtn.addEventListener('click', () => {
-            const url = new URL(window.location.href);
-            url.searchParams.delete('search');
-            url.searchParams.set('page', '1');
-            window.location.href = url.toString();
-        });
+// Event Listeners
+document.addEventListener("DOMContentLoaded", () => {
+    const sidebar = document.getElementById("sidebar");
+    const status = localStorage.getItem('sidebarStatus');
+    
+    if (status === 'open' && window.innerWidth >= 1024) {
+        sidebar.classList.add('lg:w-60'); 
+        sidebar.classList.remove('lg:w-16');
+        document.querySelector('.main').classList.add('lg:ml-60'); 
+        document.querySelector('.main').classList.remove('lg:ml-16');
     }
 
     const successAlert = document.getElementById('successAlert');
     if (successAlert) {
-        setTimeout(() => { successAlert.style.opacity = '0'; setTimeout(() => { successAlert.style.display = 'none'; }, 500); }, 5000);
+        setTimeout(() => {
+            successAlert.style.transition = 'opacity 0.5s';
+            successAlert.style.opacity = '0';
+            setTimeout(() => { successAlert.remove(); }, 500);
+        }, 5000);
+    }
+});
+
+// Resize Handler
+window.addEventListener('resize', () => {
+    const sidebar = document.getElementById('sidebar');
+    const main = document.getElementById('mainContent');
+    const overlay = document.getElementById('sidebarOverlay');
+    const toggleBtn = document.getElementById('toggleBtn'); 
+    const is_desktop = window.innerWidth >= 1024;
+    const status = localStorage.getItem('sidebarStatus');
+
+    if (is_desktop) {
+        sidebar.classList.remove('translate-x-0', '-translate-x-full');
+        if (overlay) overlay.classList.add('hidden');
+
+        if (status === 'open') {
+            sidebar.classList.add('lg:w-60');
+            sidebar.classList.remove('lg:w-16');
+            main.classList.add('lg:ml-60');
+            main.classList.remove('lg:ml-16');
+            toggleBtn.style.left = '16rem'; 
+        } else {
+            sidebar.classList.add('lg:w-16');
+            sidebar.classList.remove('lg:w-60');
+            main.classList.add('lg:ml-16');
+            main.classList.remove('lg:ml-60');
+            toggleBtn.style.left = '5rem'; 
+        }
+    } else {
+        sidebar.classList.remove('lg:w-60', 'lg:w-16');
+        main.classList.remove('lg:ml-60', 'lg:ml-16');
+        toggleBtn.style.left = '1.25rem'; 
+
+        if (status === 'open') {
+            sidebar.classList.add('translate-x-0');
+            sidebar.classList.remove('-translate-x-full');
+            if (overlay) overlay.classList.remove('hidden');
+        } else {
+            sidebar.classList.add('-translate-x-full');
+            sidebar.classList.remove('translate-x-0');
+            if (overlay) overlay.classList.add('hidden');
+        }
     }
 });
 </script>

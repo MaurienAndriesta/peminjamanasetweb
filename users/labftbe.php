@@ -28,9 +28,11 @@ $menu_items = [
     ['title' => 'Riwayat Peminjaman', 'url'  => 'riwayat.php'],
 ];
 
-// ================= AMBIL DATA RUANGAN =================
+// ================= AMBIL DATA LAB FTBE =================
 $data = [];
+// Pastikan tabelnya benar: labftbe
 $result = $koneksi->query("SELECT * FROM labftbe ORDER BY id ASC");
+
 if ($result && $result->num_rows > 0) {
     while ($row = $result->fetch_assoc()) {
         $data[] = $row;
@@ -70,10 +72,8 @@ function renderMenu($items, $prefix = 'root') {
   <title>Daftar Laboratorium FTBE</title>
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Konfigurasi Tailwind agar default font = Inter -->
   <script>
     tailwind.config = {
       theme: {
@@ -87,124 +87,134 @@ function renderMenu($items, $prefix = 'root') {
   </script>
 
   <style>
-    /* Terapkan font Inter secara global */
-    body {
-      font-family: 'Inter', sans-serif;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
-
-    /*  Efek kaca lembut */
-    .glass-effect {
-      background: rgba(255, 255, 255, 0.95);
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.3);
-    }
-
-    /* Animasi fade-in */
-    .fade-in {
-      animation: fadeIn 0.5s ease-in-out;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
+    body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    .fade-in { animation: fadeIn 0.5s ease-in-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    
+    /* Custom Scrollbar Sidebar */
+    .custom-scroll::-webkit-scrollbar { width: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #1f2937; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
   </style>
 </head>
 
-<body class="bg-gradient-to-br from-[#D1E5EA] to-white min-h-screen font-sans text-gray-800">
+<body class="flex flex-col min-h-screen bg-gradient-to-br from-[#D1E5EA] to-white font-sans text-gray-800">
 
-<!-- Navbar -->
-<nav class="fixed top-0 left-0 right-0 bg-[#D1E5EA]/90 backdrop-blur-md shadow-md h-16 z-50 flex items-center gap-4 px-6 transition-all">
-  <button id="hamburgerBtn" onclick="toggleSidebar()" 
-    class="bg-gray-800 text-white p-3 rounded-md">☰</button>
-
-  <form class="flex-1">
-    <input id="searchInput" type="text" placeholder="Cari Laboratorium..." 
-      class="w-full px-4 py-2 rounded-full border border-gray-300 text-sm shadow-sm focus:ring-2 focus:ring-blue-200 transition-all">
-  </form>
-</nav>
-
-<!-- Overlay -->
-<div id="overlay" class="hidden fixed inset-0 bg-black/40 z-40" onclick="closeSidebar()"></div>
-
-<!-- Sidebar -->
-<div id="sidebar" class="fixed top-0 left-0 w-72 h-full bg-gray-800 text-white transform -translate-x-full transition-transform duration-300 z-50 shadow-2xl">
-  <div class="bg-gray-900 px-6 py-5 font-semibold text-center border-b border-gray-700 text-lg uppercase tracking-wide">
-    Menu Utama
-  </div>
-  <nav class="p-4">
-    <?php renderMenu($menu_items); ?>
+  <nav class="fixed top-0 left-0 right-0 bg-[#D1E5EA]/90 backdrop-blur-md shadow-md h-16 z-50 flex items-center gap-4 px-6 transition-all">
+    <button id="hamburgerBtn" onclick="toggleSidebar()" class="bg-gray-800 text-white p-3 rounded-md">☰</button>
+    <form class="flex-1">
+      <input id="searchInput" type="text" placeholder="Cari Laboratorium..." class="w-full px-4 py-2 rounded-full border border-gray-300 text-sm shadow-sm focus:ring-2 focus:ring-blue-200 transition-all">
+    </form>
   </nav>
-</div>
 
-<!-- Main -->
-<main class="pt-24 px-6 max-w-7xl mx-auto fade-in">
+  <div id="overlay" class="hidden fixed inset-0 bg-black/40 z-40" onclick="closeSidebar()"></div>
+
+  <div id="sidebar" class="fixed top-0 left-0 w-72 h-full bg-gray-800 text-white transform -translate-x-full transition-transform duration-300 z-50 shadow-2xl flex flex-col">
+    <div class="bg-gray-900 px-6 py-5 font-semibold text-center border-b border-gray-700 text-lg uppercase tracking-wide flex-shrink-0">
+      Menu Utama
+    </div>
+    <nav class="p-4 flex-1 overflow-y-auto custom-scroll">
+      <?php renderMenu($menu_items); ?>
+    </nav>
+  </div>
+
+  <main class="flex-grow pt-24 px-6 fade-in w-full">
   <h2 class="text-2xl font-bold text-gray-700 mb-6 border-l-4 border-blue-400 pl-3">
-    Daftar Laboratorium Fakultas Teknologi dan Bisnis Energi
+    Daftar Laboratorium Fakultas Teknologi dan Bisnis Energi (FTBE)
   </h2>
 
-  <div class="bg-white border border-blue-200 rounded-2xl shadow-lg overflow-hidden transition-all">
-    <table class="w-full text-sm" id="ruanganTable">
-      <thead>
-        <tr class="bg-[#E3F2F7] text-gray-700 uppercase text-xs tracking-wider">
-          <th class="border border-gray-200 px-4 py-3 text-left">No</th>
-          <th class="border border-gray-200 px-4 py-3 text-left">Foto</th>
-          <th class="border border-gray-200 px-4 py-3 text-left">Nama Laboratorium</th>
+  <div class="bg-white border border-blue-200 rounded-2xl shadow-lg overflow-x-auto transition-all w-full">
+    <table class="min-w-full text-sm" id="ruanganTable">
+        <thead>
+          <tr class="bg-[#E3F2F7] text-gray-700 uppercase text-xs tracking-wider">
+            <th class="border border-gray-200 px-4 py-3 text-left">No</th>
+            <th class="border border-gray-200 px-4 py-3 text-left">Foto</th>
+            <th class="border border-gray-200 px-4 py-3 text-left">Nama Laboratorium</th>
+            <th class="border border-gray-200 px-4 py-3 text-left">Lokasi</th>
+            <th class="border border-gray-200 px-4 py-3 text-left">Tarif Sewa Lab</th>
+            <th class="border border-gray-200 px-4 py-3 text-left">Tarif Sewa Alat</th>
+            <th class="border border-gray-200 px-4 py-3 text-left w-64">Keterangan</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php 
+          $no = 1; 
+          if(count($data) > 0): 
+            foreach($data as $row): 
+            // LOGIKA CEK STATUS
+            $status_raw = isset($row['status']) ? strtolower(str_replace(['_', ' '], '', $row['status'])) : 'tersedia';
+            $is_unavailable = ($status_raw === 'tidaktersedia');
+          ?>
           
-          <th class="border border-gray-200 px-4 py-3 text-left">Lokasi</th>
-          <th class="border border-gray-200 px-4 py-3 text-left">Tarif Sewa Laboratorium</th>
-          <th class="border border-gray-200 px-4 py-3 text-left">Tarif Sewa Peralatan</th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php foreach($data as $row): ?>
-        <tr class="hover:bg-blue-50 transition duration-200">
-          <td class="border border-gray-200 px-4 py-3"><?= $row['id'] ?></td>
-          <td class="border border-gray-200 px-4 py-3 text-center">
-            <?php if (!empty($row['foto'])): ?>
-              <div class="flex flex-col items-center space-y-2">
-                <img src="uploads/ruangan/<?= htmlspecialchars($row['foto']); ?>" 
-                     alt="Foto <?= htmlspecialchars($row['nama']); ?>" 
-                     class="w-24 h-20 object-cover rounded-lg shadow-md hover:scale-105 hover:shadow-lg transition-all duration-300 cursor-pointer"
-                     onclick="showImageModal('uploads/ruangan/<?= htmlspecialchars($row['foto']); ?>')">
-                <button onclick="showImageModal('uploads/ruangan/<?= htmlspecialchars($row['foto']); ?>')" 
-                        class="text-blue-600 text-xs hover:underline transition">Lihat Foto</button>
-              </div>
-            <?php else: ?>
-              <span class="text-gray-400 italic">Tidak ada foto</span>
-            <?php endif; ?>
-          </td>
-          <td class="border border-gray-200 px-4 py-3"><?= $row['nama'] ?></td>
-          
-          <td class="border border-gray-200 px-4 py-3"><?= $row['lokasi'] ?></td>
-          <td class="border border-gray-200 px-4 py-3"><?= $row['tarif_sewa_laboratorium'] ?></td>
-          <td class="border border-gray-200 px-4 py-3"><?= $row['tarif_sewa_peralatan'] ?></td>
-        </tr>
-        <?php endforeach; ?>
-        <tr class="bg-blue-50">
-          <td colspan="8" class="border border-gray-200 px-5 py-5 italic text-gray-700 text-sm leading-relaxed">
-           <b>Keterangan:</b> Per 15 Orang/8 Jam. 
-            (Biaya tersebut tidak termasuk biaya material untuk praktek dan konsumsi).
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+          <tr class="transition duration-200 <?= $is_unavailable ? 'bg-gray-100 opacity-75' : 'hover:bg-blue-50' ?>">
+            
+            <td class="border border-gray-200 px-4 py-3 text-center"><?= $no++ ?></td>
+            
+            <td class="border border-gray-200 px-4 py-3 text-center">
+              <?php if (!empty($row['foto'])): ?>
+                <div class="flex flex-col items-center space-y-2">
+                  <img src="../admin/assets/images/<?= htmlspecialchars($row['foto']); ?>" 
+                      alt="Foto <?= htmlspecialchars($row['nama']); ?>" 
+                      class="w-24 h-20 object-cover rounded-lg shadow-md hover:scale-105 hover:shadow-lg transition-all duration-300 cursor-pointer"
+                      onclick="showImageModal('../admin/assets/images/<?= htmlspecialchars($row['foto']); ?>')">
+                  
+                  <button onclick="showImageModal('../admin/assets/images/<?= htmlspecialchars($row['foto']); ?>')" 
+                          class="text-blue-600 text-xs hover:underline transition">Lihat Foto</button>
+                </div>
+              <?php else: ?>
+                <span class="text-gray-400 italic">Tidak ada foto</span>
+              <?php endif; ?>
+            </td>
+            
+            <td class="border border-gray-200 px-4 py-3 font-medium">
+                <?= htmlspecialchars($row['nama']) ?>
+                <?php if($is_unavailable): ?>
+                    <br>
+                    <span class="mt-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-600 border border-red-200 shadow-sm">
+                        ⛔ Tidak Tersedia
+                    </span>
+                <?php endif; ?>
+            </td>
+            
+            <td class="border border-gray-200 px-4 py-3"><?= htmlspecialchars($row['lokasi']) ?></td>
+            
+            <td class="border border-gray-200 px-4 py-3 text-green-700 font-semibold">
+              <?= 'Rp ' . number_format($row['tarif_sewa_laboratorium'], 0, ',', '.') ?>
+            </td>
+            <td class="border border-gray-200 px-4 py-3 text-blue-700 font-semibold">
+              <?= 'Rp ' . number_format($row['tarif_sewa_peralatan'], 0, ',', '.') ?>
+            </td>
+            
+            <td class="border border-gray-200 px-4 py-3 text-sm text-gray-600 leading-relaxed">
+               <?= !empty($row['keterangan']) ? nl2br(htmlspecialchars($row['keterangan'])) : '-' ?>
+            </td>
 
-  <!-- Modal Foto -->
-  <div id="imageModal" class="fixed inset-0 bg-black/70 flex items-center justify-center hidden z-50">
-    <div class="relative max-w-4xl fade-in">
-      <img id="modalImage" src="" alt="Foto Ruangan" class="rounded-2xl shadow-2xl max-h-[90vh] border-4 border-white transition-all">
-      <button onclick="closeImageModal()" class="absolute -top-4 -right-4 bg-white rounded-full p-2 shadow hover:bg-gray-100 text-lg font-bold transition">✕</button>
+          </tr>
+          <?php endforeach; ?>
+          
+          <?php else: ?>
+          <tr>
+              <td colspan="7" class="border border-gray-200 px-4 py-6 text-center text-gray-500 italic">
+                  Belum ada data laboratorium.
+              </td>
+          </tr>
+          <?php endif; ?>
+        </tbody>
+      </table>
     </div>
-  </div>
-</main>
 
-<footer class="w-full bg-[#132544] text-white text-center py-3 mt-10">
-  © <?= date('Y'); ?> Institut Teknologi PLN - Sistem Peminjaman Aset
-</footer>
+    <div id="imageModal" class="fixed inset-0 bg-black/70 flex items-center justify-center hidden z-50">
+      <div class="relative max-w-4xl fade-in">
+        <img id="modalImage" src="" alt="Foto Lab" class="rounded-2xl shadow-2xl max-h-[90vh] border-4 border-white transition-all">
+        <button onclick="closeImageModal()" class="absolute -top-4 -right-4 bg-white rounded-full p-2 shadow hover:bg-gray-100 text-lg font-bold transition">✕</button>
+      </div>
+    </div>
+  </main>
+
+  <footer class="w-full bg-[#132544] text-white text-center py-3 mt-10">
+    © <?= date('Y'); ?> Institut Teknologi PLN - Sistem Peminjaman Aset
+  </footer>
 
 <script>
 // Sidebar
@@ -229,7 +239,7 @@ function toggleDropdown(id) {
 
 // Search
 const searchInput = document.getElementById("searchInput");
-const tableRows = document.querySelectorAll("#ruanganTable tbody tr");
+const tableRows = document.querySelectorAll("#ruanganTable tbody tr:not(.bg-blue-50)"); 
 searchInput.addEventListener("keyup", function () {
   let keyword = this.value.toLowerCase();
   tableRows.forEach(row => {
@@ -238,7 +248,7 @@ searchInput.addEventListener("keyup", function () {
   });
 });
 
-// Modal
+// Modal Foto
 function showImageModal(src) {
   document.getElementById('modalImage').src = src;
   document.getElementById('imageModal').classList.remove('hidden');

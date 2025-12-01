@@ -30,6 +30,7 @@ $menu_items = [
 
 // ================= AMBIL DATA FASILITAS =================
 $data = [];
+// Mengambil semua data tanpa filter status (agar tampil di tabel)
 $sql = "SELECT id, nama, kapasitas, gambar, 
                tarif_internal, tarif_eksternal, 
                keterangan, status
@@ -39,13 +40,6 @@ $sql = "SELECT id, nama, kapasitas, gambar,
 $result = $koneksi->query($sql);
 if ($result && $result->num_rows > 0) {
     while ($row = $result->fetch_assoc()) {
-        // Jika internal_itpln / eksternal_itpln kosong, ambil dari tarif
-        if (empty($row['internal_itpln']) && !empty($row['tarif_internal'])) {
-            $row['internal_itpln'] = $row['tarif_internal'];
-        }
-        if (empty($row['eksternal_itpln']) && !empty($row['tarif_eksternal'])) {
-            $row['eksternal_itpln'] = $row['tarif_eksternal'];
-        }
         $data[] = $row;
     }
 }
@@ -87,11 +81,28 @@ function renderMenu($items, $prefix = 'root') {
   <script>
     tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] } } } };
   </script>
+  
+  <style>
+    /* Custom Scrollbar untuk Sidebar */
+    .custom-scroll::-webkit-scrollbar {
+        width: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+        background: #1f2937; /* gray-800 */
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+        background: #4b5563; /* gray-600 */
+        border-radius: 3px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+        background: #9ca3af; /* gray-400 */
+    }
+  </style>
 </head>
 
-<body class="bg-gradient-to-br from-[#D1E5EA] to-white min-h-screen font-sans text-gray-800">
+<!-- PERUBAHAN 1: Menambahkan 'flex flex-col' pada body -->
+<body class="bg-gradient-to-br from-[#D1E5EA] to-white min-h-screen font-sans text-gray-800 flex flex-col">
 
-<!-- Navbar -->
 <nav class="fixed top-0 left-0 right-0 bg-[#D1E5EA]/90 backdrop-blur-md shadow-md h-16 z-50 flex items-center gap-4 px-6 transition-all">
   <button id="hamburgerBtn" onclick="toggleSidebar()" class="bg-gray-800 text-white p-3 rounded-md">☰</button>
 
@@ -101,21 +112,19 @@ function renderMenu($items, $prefix = 'root') {
   </form>
 </nav>
 
-<!-- Overlay -->
 <div id="overlay" class="hidden fixed inset-0 bg-black/40 z-40" onclick="closeSidebar()"></div>
 
-<!-- Sidebar -->
-<div id="sidebar" class="fixed top-0 left-0 w-72 h-full bg-gray-800 text-white transform -translate-x-full transition-transform duration-300 z-50 shadow-2xl">
-  <div class="bg-gray-900 px-6 py-5 font-semibold text-center border-b border-gray-700 text-lg uppercase tracking-wide">
+<div id="sidebar" class="fixed top-0 left-0 w-72 h-full bg-gray-800 text-white transform -translate-x-full transition-transform duration-300 z-50 shadow-2xl flex flex-col">
+  <div class="bg-gray-900 px-6 py-5 font-semibold text-center border-b border-gray-700 text-lg uppercase tracking-wide flex-shrink-0">
     Menu Utama
   </div>
-  <nav class="p-4">
+  <nav class="p-4 overflow-y-auto custom-scroll flex-1">
     <?php renderMenu($menu_items); ?>
   </nav>
 </div>
 
-<!-- Main -->
-<main class="pt-24 px-6 max-w-[90rem] mx-auto fade-in w-full">
+<!-- PERUBAHAN 2: Menambahkan 'flex-grow' pada main -->
+<main class="pt-24 px-6 max-w-[90rem] mx-auto fade-in w-full flex-grow">
   <h2 class="text-2xl font-bold text-gray-700 mb-6 border-l-4 border-blue-400 pl-3">
     Daftar Fasilitas
   </h2>
@@ -134,39 +143,68 @@ function renderMenu($items, $prefix = 'root') {
         </tr>
       </thead>
       <tbody>
-        <?php foreach($data as $index => $row): ?>
-        <tr class="hover:bg-blue-50 transition duration-200">
-          <td class="border border-gray-200 px-5 py-3"><?= $index + 1 ?></td>
+        <?php 
+        $no = 1; 
+        foreach($data as $row): 
+            // LOGIKA CEK STATUS
+            $status_raw = strtolower(str_replace(['_', ' '], '', $row['status']));
+            $is_unavailable = ($status_raw === 'tidaktersedia');
+        ?>
+        
+        <tr class="transition duration-200 <?= $is_unavailable ? 'bg-gray-100 opacity-75' : 'hover:bg-blue-50' ?>">
+          <td class="border border-gray-200 px-5 py-3 text-center"><?= $no++ ?></td>
+          
           <td class="border border-gray-200 px-5 py-3 text-center">
             <?php if (!empty($row['gambar'])): ?>
               <div class="flex flex-col items-center space-y-2">
-                <img src="uploads/ruangan/<?= htmlspecialchars($row['gambar']); ?>" 
+                <img src="../admin/assets/images/<?= htmlspecialchars($row['gambar']); ?>" 
                      alt="<?= htmlspecialchars($row['nama']); ?>" 
                      class="w-28 h-24 object-cover rounded-xl shadow-md hover:scale-105 hover:shadow-lg transition-all duration-300 cursor-pointer"
-                     onclick="showImageModal('uploads/ruangan/<?= htmlspecialchars($row['gambar']); ?>')">
-                <button onclick="showImageModal('uploads/ruangan/<?= htmlspecialchars($row['gambar']); ?>')" 
+                     onclick="showImageModal('../admin/assets/images/<?= htmlspecialchars($row['gambar']); ?>')">
+                
+                <button onclick="showImageModal('../admin/assets/images/<?= htmlspecialchars($row['gambar']); ?>')" 
                         class="text-blue-600 text-xs hover:underline transition">Lihat Foto</button>
               </div>
             <?php else: ?>
               <span class="text-gray-400 italic">Tidak ada foto</span>
             <?php endif; ?>
           </td>
-          <td class="border border-gray-200 px-5 py-3 font-medium text-gray-800"><?= htmlspecialchars($row['nama']) ?></td>
+          
+          <td class="border border-gray-200 px-5 py-3 font-medium text-gray-800">
+              <?= htmlspecialchars($row['nama']) ?>
+              <?php if($is_unavailable): ?>
+                  <br>
+                  <span class="mt-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-600 border border-red-200 shadow-sm">
+                      ⛔ Tidak Tersedia
+                  </span>
+              <?php endif; ?>
+          </td>
+          
           <td class="border border-gray-200 px-5 py-3"><?= htmlspecialchars($row['kapasitas']) ?: '-' ?></td>
+          
           <td class="border border-gray-200 px-4 py-3 text-green-700 font-semibold">
               <?= 'Rp ' . number_format($row['tarif_internal'], 0, ',', '.') . '/hari' ?>
-            </td>
-            <td class="border border-gray-200 px-4 py-3 text-blue-700 font-semibold">
+          </td>
+          
+          <td class="border border-gray-200 px-4 py-3 text-blue-700 font-semibold">
               <?= 'Rp ' . number_format($row['tarif_eksternal'], 0, ',', '.') . '/hari' ?>
-            </td>
+          </td>
+          
           <td class="border border-gray-200 px-5 py-3"><?= htmlspecialchars($row['keterangan']) ?></td>
         </tr>
         <?php endforeach; ?>
+        
+        <?php if(empty($data)): ?>
+        <tr>
+            <td colspan="7" class="border border-gray-200 px-4 py-6 text-center text-gray-500 italic">
+                Belum ada data fasilitas.
+            </td>
+        </tr>
+        <?php endif; ?>
       </tbody>
     </table>
   </div>
 
-  <!-- Modal Foto -->
   <div id="imageModal" class="fixed inset-0 bg-black/70 flex items-center justify-center hidden z-50">
     <div class="relative max-w-4xl fade-in">
       <img id="modalImage" src="" alt="Foto Fasilitas" class="rounded-2xl shadow-2xl max-h-[90vh] border-4 border-white transition-all">

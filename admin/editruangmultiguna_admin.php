@@ -10,31 +10,44 @@ if ($ruangan_id <= 0) {
 }
 
 $ruangan_data = [];
-$errors = [];
 $error_message = null;
 
-// --- 1. Ambil data lama sebelum POST (untuk pre-fill) ---
-$stmt = $db->prepare("SELECT * FROM tbl_ruangmultiguna WHERE id = ? AND status = 'tersedia'");
-$stmt->bind_param("i", $ruangan_id);
-$stmt->execute();
-$result = $stmt->get_result();
-$fetched_data = $result->fetch_assoc();
+// --- 1. Ambil data lama dari database ---
+$stmt_select = $db->prepare("SELECT * FROM tbl_ruangmultiguna WHERE id = ?");
+$stmt_select->bind_param("i", $ruangan_id);
+$stmt_select->execute();
+$result = $stmt_select->get_result();
 
-if (!$fetched_data) {
+if ($result && $result->num_rows > 0) {
+    $ruangan_data = $result->fetch_assoc();
+} else {
     header('Location: dataruangmultiguna_admin.php');
     exit;
 }
-$ruangan_data = $fetched_data;
+$stmt_select->close();
 
-// --- 2. Proses form ketika disubmit ---
+// Ambil status sekarang dari database untuk default dropdown
+$status_sekarang = isset($ruangan_data['status']) ? trim($ruangan_data['status']) : 'tersedia';
+
+// --- 2. Jika form disubmit ---
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $nama_ruang = trim($_POST['nama_ruang'] ?? '');
     $kapasitas = trim($_POST['kapasitas'] ?? '');
     $lokasi = trim($_POST['lokasi'] ?? '');
+    
+    // Ambil status dari form
+    $status_input = $_POST['status'] ?? 'tersedia';
+    
     $tipe_tarif = $_POST['tipe_tarif'] ?? 'berbayar';
-    $tarif_internal = (float)($_POST['tarif_internal'] ?? 0);
-    $tarif_eksternal = (float)($_POST['tarif_eksternal'] ?? 0);
+    // Bersihkan format rupiah jika ada titik/koma
+    $tarif_internal = (float)str_replace(['.', ','], ['', '.'], $_POST['tarif_internal'] ?? '0');
+    $tarif_eksternal = (float)str_replace(['.', ','], ['', '.'], $_POST['tarif_eksternal'] ?? '0');
     $keterangan = trim($_POST['keterangan'] ?? '');
+
+    // Update status sekarang agar dropdown tetap benar jika ada error
+    $status_sekarang = $status_input;
+
+    $errors = [];
 
     // Validasi
     if (empty($nama_ruang)) $errors[] = "Nama ruang harus diisi";
@@ -50,20 +63,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if ($tarif_eksternal <= 0) $errors[] = "Tarif eksternal harus lebih dari 0";
     }
 
-    // Upload gambar
+    // --- Upload Gambar ---
     $gambar_name = $ruangan_data['gambar'];
-    $upload_dir = 'assets/images/';
+    $gambar_name_new = null;
     if (isset($_FILES['gambar']) && $_FILES['gambar']['error'] == 0) {
         $allowed_types = ['image/jpeg', 'image/png', 'image/jpg'];
-        $max_size = 2 * 1024 * 1024;
+        $max_size = 2 * 1024 * 1024; // 2MB
+        $upload_dir = 'assets/images/';
 
         if (!in_array($_FILES['gambar']['type'], $allowed_types)) {
             $errors[] = "Format gambar harus JPG, JPEG, atau PNG";
         } elseif ($_FILES['gambar']['size'] > $max_size) {
             $errors[] = "Ukuran gambar maksimal 2MB";
         } else {
+            if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
             $file_ext = pathinfo($_FILES['gambar']['name'], PATHINFO_EXTENSION);
-            $gambar_name_new = 'room_' . $ruangan_id . '_' . time() . '.' . $file_ext;
+            // Penamaan file unik
+            $gambar_name_new = 'ruangan_' . $ruangan_id . '_' . time() . '.' . $file_ext;
             $upload_path = $upload_dir . $gambar_name_new;
 
             if (move_uploaded_file($_FILES['gambar']['tmp_name'], $upload_path)) {
@@ -73,41 +89,41 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $gambar_name = $gambar_name_new;
             } else {
                 $errors[] = "Gagal mengupload gambar baru";
+                $gambar_name_new = null;
             }
         }
     }
 
-    if (!empty($errors)) {
-        $error_message = implode("<br>", $errors);
-        $ruangan_data = array_merge($ruangan_data, [
-            'nama' => $nama_ruang,
-            'kapasitas' => $kapasitas,
-            'lokasi' => $lokasi,
-            'tarif_internal' => $tarif_internal,
-            'tarif_eksternal' => $tarif_eksternal,
-            'keterangan' => $keterangan,
-            'gambar' => $gambar_name
-        ]);
-    } else {
-        // --- Update Data ---
-        if (!empty($gambar_name)) {
-            $stmt = $db->prepare("UPDATE tbl_ruangmultiguna
-                SET nama=?, kapasitas=?, lokasi=?, tarif_internal=?, tarif_eksternal=?, keterangan=?, gambar=?, updated_at=NOW() 
-                WHERE id=?");
-            $stmt->bind_param("sssdsssi", $nama_ruang, $kapasitas, $lokasi, $tarif_internal, $tarif_eksternal, $keterangan, $gambar_name, $ruangan_id);
-        } else {
-            $stmt = $db->prepare("UPDATE tbl_ruangmultiguna
-                SET nama=?, kapasitas=?, lokasi=?, tarif_internal=?, tarif_eksternal=?, keterangan=?, updated_at=NOW() 
-                WHERE id=?");
-            $stmt->bind_param("sssdssi", $nama_ruang, $kapasitas, $lokasi, $tarif_internal, $tarif_eksternal, $keterangan, $ruangan_id);
-        }
+    if (empty($errors)) {
+        $stmt_update = $db->prepare("
+            UPDATE tbl_ruangmultiguna 
+            SET nama = ?, kapasitas = ?, lokasi = ?, status = ?, tarif_internal = ?, tarif_eksternal = ?, keterangan = ?, updated_at = NOW()" . 
+            ($gambar_name_new ? ", gambar = ?" : "") . "
+            WHERE id = ?
+        ");
 
-        if ($stmt->execute()) {
+        // Bind parameter dinamis tergantung apakah gambar diupdate atau tidak
+        if ($gambar_name_new) {
+            $stmt_update->bind_param("ssssddssi", $nama_ruang, $kapasitas, $lokasi, $status_input, $tarif_internal, $tarif_eksternal, $keterangan, $gambar_name, $ruangan_id);
+        } else {
+            $stmt_update->bind_param("ssssddsi", $nama_ruang, $kapasitas, $lokasi, $status_input, $tarif_internal, $tarif_eksternal, $keterangan, $ruangan_id);
+        }
+        
+        if ($stmt_update->execute()) {
             header("Location: dataruangmultiguna_admin.php?status=success_edit");
             exit;
         } else {
-            $error_message = "Gagal memperbarui data ruangan.";
+            $error_message = "Gagal memperbarui data: " . $stmt_update->error;
         }
+        $stmt_update->close();
+
+    } else {
+        $error_message = implode("<br>", $errors);
+        $ruangan_data = array_merge($ruangan_data, [
+            'nama' => $nama_ruang, 'kapasitas' => $kapasitas, 'lokasi' => $lokasi,
+            'status' => $status_input, 'tarif_internal' => $tarif_internal,
+            'tarif_eksternal' => $tarif_eksternal, 'keterangan' => $keterangan
+        ]);
     }
 }
 ?>
@@ -117,45 +133,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edit Data Ruangan - Admin Pengelola</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Edit Data Ruang Multiguna - Admin Pengelola</title>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        /* CSS khusus untuk integrasi dan font */
-        body { 
-            font-family: 'Poppins', sans-serif; 
-        }
-        /* Style untuk image upload */
-        .image-upload-area {
-            position: relative;
-            cursor: pointer;
-            overflow: hidden;
-            transition: all .2s;
-        }
-        /* PENTING: Input file harus selalu visible dan di atas elemen lain */
-        .image-upload-area input[type="file"] {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            opacity: 0;
-            cursor: pointer;
-            z-index: 10; 
-        }
-        .preview-image {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            border-radius: 0.75rem; 
-        }
-        .upload-placeholder {
-            transition: opacity .3s;
-            z-index: 5;
-        }
-        /* Warna Aksen Gelap */
-        .text-dark-accent {
-            color: #202938;
-        }
+        body { font-family: 'Poppins', sans-serif; }
+        .image-upload-area { position: relative; cursor: pointer; overflow: hidden; transition: all .2s; }
+        .image-upload-area input[type="file"] { position: absolute; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10; }
+        .preview-image { width: 100%; height: 100%; object-fit: cover; border-radius: 0.75rem; }
+        .upload-placeholder { transition: opacity .3s; z-index: 5; }
+        .tarif-row { display: grid; grid-template-columns: 1fr max-content; gap: 0.5rem; align-items: center; }
+        .input-group { position: relative; }
+        .input-group .form-input { padding-left: 3rem; }
+        .input-prefix { position: absolute; left: 0.5rem; top: 50%; transform: translateY(-50%); color: #4b5563; font-weight: 600; pointer-events: none; }
     </style>
 </head>
 <body class="bg-blue-100 flex min-h-screen text-gray-800">
@@ -179,8 +170,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <a href="dataruangmultiguna_admin.php" class="bg-gray-700 hover:bg-gray-800 text-white p-3 rounded-lg mr-4 transition-colors">←</a>
             
             <div>
-                <h1 class="text-2xl font-bold text-amber-700">Edit Data Ruangan</h1>
-                <p class="text-gray-500 text-sm">Perbarui informasi ruangan multiguna (ID: <?= $ruangan_id ?>)</p>
+                <h1 class="text-2xl font-bold text-amber-700">Edit Data Ruang Multiguna: <?= htmlspecialchars($ruangan_data['nama'] ?? 'N/A') ?></h1>
+                <p class="text-gray-500 text-sm">Perbarui informasi ruangan</p>
             </div>
         </div>
 
@@ -196,12 +187,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
                     <div class="image-upload-area w-full h-64 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center hover:border-amber-500">
                         <input type="file" id="fileInput" name="gambar" accept="image/*" onchange="previewImage(event)">
-                        
                         <img id="previewImg" class="preview-image absolute inset-0" 
                             src="<?= !empty($ruangan_data['gambar']) ? 'assets/images/' . htmlspecialchars($ruangan_data['gambar']) : '' ?>" 
                             alt="Pratinjau Gambar"
                             onerror="this.style.display='none'">
-                        
                         <div class="text-center text-gray-500 upload-placeholder" id="uploadPlaceholder">
                             <p class="font-semibold">Klik untuk <?= !empty($ruangan_data['gambar']) ? 'mengubah' : 'menambah' ?> gambar</p>
                             <small>JPG, PNG maksimal 2MB</small>
@@ -209,89 +198,87 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     </div>
 
                     <div class="form-group">
-                        <label for="nama_ruang" class="block font-semibold mb-2">Ruang : <span class="text-red-500">*</span></label>
-                        <input type="text" id="nama_ruang" name="nama_ruang" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
-                               placeholder="Isi Ruang" required 
-                               value="<?= htmlspecialchars($ruangan_data['nama'] ?? '') ?>">
+                        <label class="block font-semibold mb-2">Tipe Tarif : <span class="text-red-500">*</span></label>
+                        <div class="flex items-center gap-6">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" id="gratis" name="tipe_tarif" value="gratis" class="form-radio text-amber-500 h-4 w-4"
+                                    <?= (!isset($ruangan_data['tarif_internal']) || $ruangan_data['tarif_internal'] == 0) ? 'checked' : '' ?>>
+                                Gratis
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" id="berbayar" name="tipe_tarif" value="berbayar" class="form-radio text-amber-500 h-4 w-4"
+                                    <?= (isset($ruangan_data['tarif_internal']) && $ruangan_data['tarif_internal'] > 0) ? 'checked' : '' ?>>
+                                Berbayar
+                            </label>
+                        </div>
                     </div>
 
-                    <div class="form-group">
-                        <label for="kapasitas" class="block font-semibold mb-2">Kapasitas : <span class="text-red-500">*</span></label>
-                        <input type="text" id="kapasitas" name="kapasitas" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
-                               placeholder="Isi Kapasitas" required
-                               value="<?= htmlspecialchars($ruangan_data['kapasitas'] ?? '') ?>">
+                    <div id="tarifSection">
+                        <div class="form-group">
+                            <label class="block font-semibold mb-2">Tarif Sewa Internal : <span class="text-red-500">*</span></label>
+                            <div class="tarif-row">
+                                <input type="hidden" id="tarif_internal" name="tarif_internal" value="<?= $ruangan_data['tarif_internal'] ?? '' ?>">
+                                <div class="input-group">
+                                    <span class="input-prefix">Rp</span>
+                                    <input type="text" id="tarif_internal_display" class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500" value="<?= number_format($ruangan_data['tarif_internal'] ?? 0, 0, ',', '.') ?>">
+                                </div>
+                                <div class="inline-flex items-center px-4 py-3 border border-gray-300 rounded-lg bg-white">
+                                    <span class="text-sm font-medium">perhari</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="block font-semibold mb-2">Tarif Sewa Eksternal : <span class="text-red-500">*</span></label>
+                            <div class="tarif-row">
+                                <input type="hidden" id="tarif_eksternal" name="tarif_eksternal" value="<?= $ruangan_data['tarif_eksternal'] ?? '' ?>">
+                                <div class="input-group">
+                                    <span class="input-prefix">Rp</span>
+                                    <input type="text" id="tarif_eksternal_display" class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500" value="<?= number_format($ruangan_data['tarif_eksternal'] ?? 0, 0, ',', '.') ?>">
+                                </div>
+                                <div class="inline-flex items-center px-4 py-3 border border-gray-300 rounded-lg bg-white">
+                                    <span class="text-sm font-medium">perhari</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
                 <div class="space-y-6">
                     <div class="form-group">
-                        <label for="lokasi" class="block font-semibold mb-2">Lokasi : <span class="text-red-500">*</span></label>
-                        <input type="text" id="lokasi" name="lokasi" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
-                               placeholder="Isi Lokasi" required
-                               value="<?= htmlspecialchars($ruangan_data['lokasi'] ?? '') ?>">
+                        <label for="nama_ruang" class="block font-semibold mb-2">Nama Ruang : <span class="text-red-500">*</span></label>
+                        <input type="text" id="nama_ruang" name="nama_ruang" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" required value="<?= htmlspecialchars($ruangan_data['nama'] ?? '') ?>">
                     </div>
 
                     <div class="form-group">
-                        <label class="block font-semibold mb-2">Tipe Tarif : <span class="text-red-500">*</span></label>
-                        <div class="flex items-center gap-6">
-                            <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="radio" id="gratis" name="tipe_tarif" value="gratis" class="form-radio text-amber-500 h-4 w-4"
-                                       <?= (!isset($ruangan_data['tarif_internal']) || $ruangan_data['tarif_internal'] == 0) ? 'checked' : '' ?>>
-                                Gratis
-                            </label>
-                            <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="radio" id="berbayar" name="tipe_tarif" value="berbayar" class="form-radio text-amber-500 h-4 w-4"
-                                       <?= (isset($ruangan_data['tarif_internal']) && $ruangan_data['tarif_internal'] > 0) ? 'checked' : '' ?>>
-                                Berbayar
-                            </label>
-                             <div class="flex items-center gap-2 text-sm text-gray-600 border-l pl-4">
-                                <label class="flex items-center gap-1 cursor-pointer">
-                                    <input type="radio" id="hari" name="periode" value="hari" class="form-radio text-amber-500 h-4 w-4" checked> Hari
-                                </label>
-                                <span>/</span>
-                                <label class="flex items-center gap-1 cursor-pointer">
-                                    <input type="radio" id="jam" name="periode" value="jam" class="form-radio text-amber-500 h-4 w-4"> Jam
-                                </label>
-                            </div>
-                        </div>
+                        <label for="kapasitas" class="block font-semibold mb-2">Kapasitas : <span class="text-red-500">*</span></label>
+                        <input type="text" id="kapasitas" name="kapasitas" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" required value="<?= htmlspecialchars($ruangan_data['kapasitas'] ?? '') ?>">
                     </div>
 
-                    <div class="form-group" id="tarifSection">
-                        <label class="block font-semibold mb-2">Tarif Sewa Internal/Eksternal IT PLN : <span class="text-red-500">*</span></label>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <input type="number" name="tarif_internal" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
-                                       placeholder="Isi Tarif Internal" 
-                                       value="<?= isset($ruangan_data['tarif_internal']) && $ruangan_data['tarif_internal'] > 0 ? $ruangan_data['tarif_internal'] : '' ?>">
-                                <div class="flex items-center justify-start mt-2 text-sm text-gray-600">
-                                    <span class="font-medium">Internal</span>
-                                </div>
-                            </div>
-                            <div>
-                                <input type="number" name="tarif_eksternal" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
-                                       placeholder="Isi Tarif Eksternal" 
-                                       value="<?= isset($ruangan_data['tarif_eksternal']) && $ruangan_data['tarif_eksternal'] > 0 ? $ruangan_data['tarif_eksternal'] : '' ?>">
-                                <div class="flex items-center justify-start mt-2 text-sm text-gray-600">
-                                    <span class="font-medium">Eksternal</span>
-                                </div>
-                            </div>
-                        </div>
+                    <div class="form-group">
+                        <label for="lokasi" class="block font-semibold mb-2">Lokasi : <span class="text-red-500">*</span></label>
+                        <input type="text" id="lokasi" name="lokasi" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" required value="<?= htmlspecialchars($ruangan_data['lokasi'] ?? '') ?>">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="status" class="block font-semibold mb-2">Status : <span class="text-red-500">*</span></label>
+                        <select id="status" name="status" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" required>
+                            <option value="tersedia" <?= ($status_sekarang == 'tersedia') ? 'selected' : '' ?>>Tersedia</option>
+                            <option value="tidak tersedia" <?= ($status_sekarang == 'tidak tersedia') ? 'selected' : '' ?>>Tidak Tersedia</option>
+                        </select>
                     </div>
 
                     <div class="form-group">
                         <label for="keterangan" class="block font-semibold mb-2">Keterangan : <span class="text-red-500">*</span></label>
-                        <textarea id="keterangan" name="keterangan" rows="4" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
-                                 placeholder="Isi Keterangan" required><?= htmlspecialchars($ruangan_data['keterangan'] ?? '') ?></textarea>
+                        <textarea id="keterangan" name="keterangan" rows="4" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" required><?= htmlspecialchars($ruangan_data['keterangan'] ?? '') ?></textarea>
                     </div>
                 </div>
             </div>
 
             <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-200">
-                <a href="dataruangmultiguna_admin.php" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold px-6 py-3 rounded-lg shadow transition-colors"
-                onclick="confirmCancel(event);">
+                <a href="dataruangmultiguna_admin.php" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold px-6 py-3 rounded-lg shadow transition-colors" onclick="confirmCancel(event);">
                     Batal
                 </a>
-
                 <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-semibold px-6 py-3 rounded-lg shadow transition-colors">
                     Simpan Perubahan
                 </button>
@@ -301,22 +288,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 </div>
 
 <script>
-// === Fungsi Sidebar (biarkan sama) ===
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     const main = document.getElementById('mainContent');
     const is_desktop = window.innerWidth >= 1024;
-
     if (is_desktop) {
-        sidebar.classList.toggle('lg:w-60');
-        sidebar.classList.toggle('lg:w-16');
-        main.classList.toggle('lg:ml-60');
-        main.classList.toggle('lg:ml-16');
+        sidebar.classList.toggle('lg:w-60'); sidebar.classList.toggle('lg:w-16');
+        main.classList.toggle('lg:ml-60'); main.classList.toggle('lg:ml-16');
     } else {
-        sidebar.classList.toggle('translate-x-0');
-        sidebar.classList.toggle('-translate-x-full');
+        sidebar.classList.toggle('translate-x-0'); sidebar.classList.toggle('-translate-x-full');
     }
-
     const is_expanded = sidebar.classList.contains('lg:w-60') || sidebar.classList.contains('translate-x-0');
     if (typeof updateSidebarVisibility === 'function') {
         updateSidebarVisibility(is_expanded);
@@ -324,41 +305,22 @@ function toggleSidebar() {
     localStorage.setItem('sidebarStatus', is_expanded ? 'open' : 'collapsed');
 }
 
-// === Pratinjau Gambar + Validasi SweetAlert ===
 function previewImage(event) {
     const file = event.target.files[0];
     const img = document.getElementById('previewImg');
     const placeholder = document.getElementById('uploadPlaceholder');
-
     if (!file) return;
 
     const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
-    const maxSize = 2 * 1024 * 1024; // 2MB
+    const maxSize = 2 * 1024 * 1024;
 
     if (!allowedTypes.includes(file.type)) {
-        Swal.fire({
-            icon: 'error',
-            title: 'Format Tidak Didukung',
-            text: 'Format gambar harus JPG, JPEG, atau PNG.',
-            confirmButtonColor: '#f59e0b'
-        });
-        event.target.value = '';
-        img.style.display = 'none';
-        placeholder.style.opacity = '1';
-        return;
+        Swal.fire({ icon: 'error', title: 'Format Tidak Didukung', text: 'Format gambar harus JPG, JPEG, atau PNG.', confirmButtonColor: '#f59e0b' });
+        event.target.value = ''; return;
     }
-
     if (file.size > maxSize) {
-        Swal.fire({
-            icon: 'error',
-            title: 'Ukuran File Terlalu Besar',
-            text: 'Ukuran maksimal gambar adalah 2MB.',
-            confirmButtonColor: '#f59e0b'
-        });
-        event.target.value = '';
-        img.style.display = 'none';
-        placeholder.style.opacity = '1';
-        return;
+        Swal.fire({ icon: 'error', title: 'Ukuran File Terlalu Besar', text: 'Ukuran maksimal gambar adalah 2MB.', confirmButtonColor: '#f59e0b' });
+        event.target.value = ''; return;
     }
 
     const reader = new FileReader();
@@ -370,12 +332,11 @@ function previewImage(event) {
     reader.readAsDataURL(file);
 }
 
-// === SweetAlert Tombol Batal ===
 function confirmCancel(event) {
     event.preventDefault();
     Swal.fire({
         title: 'Batalkan Perubahan?',
-        text: 'Perubahan yang kamu buat tidak akan disimpan.',
+        text: 'Perubahan yang sudah kamu buat tidak akan disimpan.',
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#f59e0b',
@@ -389,71 +350,91 @@ function confirmCancel(event) {
     });
 }
 
-// === Validasi Form Frontend ===
+function formatRupiah(angka) {
+    const number = parseInt(String(angka).replace(/[^0-9]/g, ''));
+    if (isNaN(number)) return '';
+    return number.toLocaleString('id-ID');
+}
+
+function setupTarifInput(displayId, hiddenId) {
+    const display = document.getElementById(displayId);
+    const hidden = document.getElementById(hiddenId);
+    if (display && hidden) {
+        display.addEventListener('input', function(e) {
+            const formatted = formatRupiah(e.target.value);
+            e.target.value = formatted;
+            hidden.value = formatted.replace(/\./g, '');
+        });
+    }
+}
+
+function toggleTarifSection() {
+    const isBerbayar = document.getElementById('berbayar').checked;
+    const tarifSection = document.getElementById('tarifSection');
+    const inputs = tarifSection.querySelectorAll('input');
+    
+    if (isBerbayar) {
+        tarifSection.style.display = 'block';
+        inputs.forEach(input => input.disabled = false);
+    } else {
+        tarifSection.style.display = 'none';
+        document.getElementById('tarif_internal').value = '0';
+        document.getElementById('tarif_eksternal').value = '0';
+        document.getElementById('tarif_internal_display').value = '0';
+        document.getElementById('tarif_eksternal_display').value = '0';
+        inputs.forEach(input => input.disabled = true);
+    }
+}
+
 document.getElementById('editForm').addEventListener('submit', function(e) {
     const isBerbayar = document.getElementById('berbayar').checked;
     let isValid = true;
-
-    this.querySelectorAll('input, textarea').forEach(input => input.style.borderColor = '');
-
-    this.querySelectorAll('[required]').forEach(input => {
-        if (!input.value.trim()) {
+    this.querySelectorAll('input, select, textarea').forEach(input => input.style.borderColor = '');
+    
+    const requiredFields = ['nama_ruang', 'kapasitas', 'lokasi', 'status', 'keterangan'];
+    requiredFields.forEach(fieldId => {
+        const input = document.getElementById(fieldId);
+        if (input && !input.value.trim()) {
             isValid = false;
             input.style.borderColor = '#ef4444';
         }
     });
 
     if (isBerbayar) {
-        const tarifInternal = document.querySelector('input[name="tarif_internal"]');
-        const tarifEksternal = document.querySelector('input[name="tarif_eksternal"]');
-        if (tarifInternal && (!tarifInternal.value || parseFloat(tarifInternal.value) <= 0)) {
+        const tarifInternal = document.getElementById('tarif_internal');
+        const tarifEksternal = document.getElementById('tarif_eksternal');
+        if (parseFloat(tarifInternal.value) <= 0) {
             isValid = false;
-            tarifInternal.style.borderColor = '#ef4444';
+            document.getElementById('tarif_internal_display').style.borderColor = '#ef4444';
         }
-        if (tarifEksternal && (!tarifEksternal.value || parseFloat(tarifEksternal.value) <= 0)) {
+        if (parseFloat(tarifEksternal.value) <= 0) {
             isValid = false;
-            tarifEksternal.style.borderColor = '#ef4444';
+            document.getElementById('tarif_eksternal_display').style.borderColor = '#ef4444';
         }
     }
-
+    
     if (!isValid) {
         e.preventDefault();
         Swal.fire({
             icon: 'warning',
             title: 'Form Belum Lengkap',
-            text: 'Mohon lengkapi semua field yang diperlukan, terutama tarif jika "Berbayar" dipilih.',
+            text: 'Mohon lengkapi semua field yang diperlukan dan pastikan tarif lebih dari 0 jika berbayar.',
             confirmButtonColor: '#f59e0b'
         });
     }
 });
 
-// === Toggle Tarif Section ===
-function toggleTarifSection() {
-    const isBerbayar = document.getElementById('berbayar').checked;
-    const tarifSection = document.getElementById('tarifSection');
-    const tarifInputs = tarifSection.querySelectorAll('input[type="number"]');
-
-    if (isBerbayar) {
-        tarifSection.style.display = 'block';
-        tarifSection.style.opacity = '1';
-        tarifInputs.forEach(input => input.disabled = false);
-    } else {
-        tarifSection.style.display = 'none';
-        tarifSection.style.opacity = '0.5';
-        tarifInputs.forEach(input => input.disabled = true);
-    }
-}
-
-// === Inisialisasi ===
 document.getElementById('gratis').addEventListener('change', toggleTarifSection);
 document.getElementById('berbayar').addEventListener('change', toggleTarifSection);
 
 document.addEventListener('DOMContentLoaded', function() {
+    setupTarifInput('tarif_internal_display', 'tarif_internal');
+    setupTarifInput('tarif_eksternal_display', 'tarif_eksternal');
     toggleTarifSection();
 
     const img = document.getElementById('previewImg');
     const placeholder = document.getElementById('uploadPlaceholder');
-    if (img.src && img.src.includes('assets/images/') && img.src.length > 30) {
+    if (img.src && !img.src.endsWith('/') && img.src.length > 30) {
         img.style.display = 'block';
         placeholder.style.opacity = '0';
     } else {
@@ -464,12 +445,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const sidebar = document.getElementById('sidebar');
     const main = document.getElementById('mainContent');
     const status = localStorage.getItem('sidebarStatus');
+    const is_desktop = window.innerWidth >= 1024;
     if (status === 'open') {
-        main.classList.add('ml-60');
-        main.classList.remove('ml-16');
+        if (is_desktop) { main.classList.add('lg:ml-60'); main.classList.remove('lg:ml-16'); }
     } else {
-        main.classList.remove('ml-60');
-        main.classList.add('ml-16');
+        if (is_desktop) { main.classList.remove('lg:ml-60'); main.classList.add('lg:ml-16'); }
     }
 });
 </script>

@@ -1,19 +1,51 @@
 <?php
-require_once 'config/database.php';
-$db = new Database();
+session_start();
+require_once '../koneksi.php'; 
+$db = $koneksi;
 
-/*
-=========================================================
- NOTIFIKASI OTOMATIS DARI TABEL PEMESANAN
-=========================================================
-*/
+function time_elapsed_string($datetime, $full = false) {
+    $now = new DateTime;
+    $ago = new DateTime($datetime);
+    $diff = $now->diff($ago);
 
-$db->query("
-    SELECT id, pemohon, nama_ruang, status, created_at, updated_at
-    FROM pemesanan
-    ORDER BY updated_at DESC, created_at DESC
-");
-$notifikasi = $db->resultSet();
+    $diff->w = floor($diff->d / 7);
+    $diff->d -= $diff->w * 7;
+
+    $string = array(
+        'y' => 'tahun', 'm' => 'bulan', 'w' => 'minggu',
+        'd' => 'hari', 'h' => 'jam', 'i' => 'menit', 's' => 'detik',
+    );
+    foreach ($string as $k => &$v) {
+        if ($diff->$k) {
+            $v = $diff->$k . ' ' . $v . ($diff->$k > 1 ? '' : '');
+        } else {
+            unset($string[$k]);
+        }
+    }
+
+    if (!$full) $string = array_slice($string, 0, 1);
+    return $string ? implode(', ', $string) . ' yang lalu' : 'Baru saja';
+}
+
+$query_new = "SELECT * FROM tbl_pengajuan 
+              WHERE status IN ('pending', 'Menunggu', 'menunggu') 
+              ORDER BY created_at DESC";
+$res_new = $db->query($query_new);
+$new_orders = [];
+while ($row = $res_new->fetch_assoc()) {
+    $new_orders[] = $row;
+}
+
+$query_log = "SELECT * FROM tbl_pengajuan 
+              WHERE status NOT IN ('pending', 'Menunggu', 'menunggu') 
+              ORDER BY updated_at DESC LIMIT 10";
+$res_log = $db->query($query_log);
+$logs = [];
+while ($row = $res_log->fetch_assoc()) {
+    $logs[] = $row;
+}
+
+$unread_count = count($new_orders);
 ?>
 
 <!DOCTYPE html>
@@ -21,9 +53,9 @@ $notifikasi = $db->resultSet();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Notifikasi Admin - Admin Pengelola</title>
+    <title>Notifikasi - Admin Pengelola</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Poppins', sans-serif; }
         .text-dark-accent { color: #202938; }
@@ -32,193 +64,177 @@ $notifikasi = $db->resultSet();
             .main { margin-left: 4rem; }
             .main.lg\:ml-60 { margin-left: 15rem; }
         }
-        
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+        @media (max-width: 1023px) {
+            .main { margin-left: 0 !important; }
+        }
+
+        #toggleBtn {
+            position: fixed; 
+            top: 1.25rem; 
+            left: 1.25rem; 
+            z-index: 60 !important; 
+            transition: left 0.3s ease; 
+        }
+
+        #sidebar {
+            position: fixed;
+            z-index: 50; 
+            top: 0;
+            left: 0;
+            height: 100%;
+        }
+
+        #sidebar.lg\:w-16 .sidebar-text {
+            display: none;
+        }
+
+        #sidebar.lg\:w-60 .sidebar-text {
+            display: inline;
+        }
+
+        @media (max-width: 1023px) {
+            .sidebar-text {
+                display: inline !important;
+            }
         }
         
-        .notification-card {
-            animation: slideIn 0.4s ease-out forwards;
-            opacity: 0;
+        @keyframes ring {
+            0% { transform: rotate(0); } 10% { transform: rotate(15deg); } 20% { transform: rotate(-15deg); }
+            30% { transform: rotate(10deg); } 40% { transform: rotate(-10deg); } 50% { transform: rotate(0); }
         }
+        .bell-ring { animation: ring 2s ease-in-out infinite; transform-origin: top center; }
+        
+        .animate-fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body class="bg-blue-100 flex min-h-screen">
 
+<div id="sidebarOverlay" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden lg:hidden"></div>
+
 <?php include 'sidebar_admin.php'; ?>
 
-<div id="mainContent" class="main flex-1 p-5 transition-all duration-300 lg:ml-16">
-    <!-- Header -->
-    <div class="header flex justify-start items-center mb-6">
-        <button class="bg-amber-500 hover:bg-amber-600 text-gray-900 p-2 rounded-lg transition-colors" onclick="toggleSidebar()">☰</button>
-    </div>
+<button class="hamburger bg-amber-500 hover:bg-amber-600 text-gray-900 p-2 rounded-lg transition-colors shadow-md" id="toggleBtn" onclick="toggleSidebar()">
+    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+    </svg>
+</button>
 
-    <!-- Content Wrapper -->
-    <div class="max-w-6xl mx-auto">
-        <!-- Page Header -->
-        <div class="bg-white rounded-2xl shadow-lg p-8 mb-6">
-            <div class="flex items-center gap-4 mb-2">
-                <div class="w-14 h-14 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center text-3xl shadow-lg">
-                    🔔
+<div id="mainContent" class="main flex-1 p-5 transition-all duration-300 lg:ml-16 animate-fade-in-up">
+    
+    <div class="header flex justify-end items-center mb-6">
+        <div class="flex items-center gap-4">
+            <h1 class="text-lg sm:text-xl font-bold text-gray-800">Pusat Notifikasi</h1>
+            
+            <div class="relative flex-shrink-0">
+                <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-md">
+                    <span class="text-xl <?= $unread_count > 0 ? 'bell-ring text-amber-500' : 'text-gray-400' ?>">🔔</span>
                 </div>
-                <div>
-                    <h1 class="text-3xl font-bold text-dark-accent">Notifikasi Pemesanan</h1>
-                    <p class="text-gray-600 text-sm">Pantau status pemesanan ruangan secara real-time</p>
-                </div>
+                <?php if($unread_count > 0): ?>
+                    <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-blue-100">
+                        <?= $unread_count ?>
+                    </span>
+                <?php endif; ?>
             </div>
         </div>
+    </div>
 
-        <!-- Stats Summary -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <?php
-                $stats = [
-                    'pending' => ['count' => 0, 'label' => 'Pending', 'icon' => '⏳', 'gradient' => 'from-orange-400 to-orange-600'],
-                    'disetujui' => ['count' => 0, 'label' => 'Disetujui', 'icon' => '✓', 'gradient' => 'from-green-400 to-green-600'],
-                    'ditolak' => ['count' => 0, 'label' => 'Ditolak', 'icon' => '✗', 'gradient' => 'from-red-400 to-red-600'],
-                    'selesai' => ['count' => 0, 'label' => 'Selesai', 'icon' => '✔', 'gradient' => 'from-blue-400 to-blue-600']
-                ];
-                
-                foreach ($notifikasi as $n) {
-                    if (isset($stats[$n['status']])) {
-                        $stats[$n['status']]['count']++;
-                    }
-                }
-            ?>
-            <?php foreach ($stats as $key => $stat): ?>
-                <div class="bg-gradient-to-br <?= $stat['gradient'] ?> text-white p-6 rounded-xl shadow-lg transform hover:scale-105 transition-transform">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-3xl"><?= $stat['icon'] ?></span>
-                        <span class="text-4xl font-bold"><?= $stat['count'] ?></span>
-                    </div>
-                    <div class="text-sm font-semibold opacity-90"><?= $stat['label'] ?></div>
-                </div>
-            <?php endforeach; ?>
-        </div>
+    <div class="max-w-4xl mx-auto">
+        
+        <div class="mb-8">
+            <h2 class="text-sm font-bold text-gray-600 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <span class="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span> 
+                Permintaan Baru (<?= $unread_count ?>)
+            </h2>
 
-        <!-- Notifications List -->
-        <?php if (count($notifikasi) > 0): ?>
-            <div class="space-y-3">
-                <?php foreach ($notifikasi as $index => $n): ?>
-                    <?php
-                        // Konfigurasi per status
-                        $config = match ($n['status']) {
-                            'pending' => [
-                                'bg' => 'bg-orange-50',
-                                'border' => 'border-orange-400',
-                                'badge' => 'bg-orange-500',
-                                'icon' => '⏳',
-                                'iconBg' => 'bg-orange-100',
-                                'iconText' => 'text-orange-600',
-                                'title' => 'Menunggu Persetujuan'
-                            ],
-                            'disetujui' => [
-                                'bg' => 'bg-green-50',
-                                'border' => 'border-green-400',
-                                'badge' => 'bg-green-500',
-                                'icon' => '✓',
-                                'iconBg' => 'bg-green-100',
-                                'iconText' => 'text-green-600',
-                                'title' => 'Pemesanan Disetujui'
-                            ],
-                            'ditolak' => [
-                                'bg' => 'bg-red-50',
-                                'border' => 'border-red-400',
-                                'badge' => 'bg-red-500',
-                                'icon' => '✗',
-                                'iconBg' => 'bg-red-100',
-                                'iconText' => 'text-red-600',
-                                'title' => 'Pemesanan Ditolak'
-                            ],
-                            'selesai' => [
-                                'bg' => 'bg-blue-50',
-                                'border' => 'border-blue-400',
-                                'badge' => 'bg-blue-500',
-                                'icon' => '✔',
-                                'iconBg' => 'bg-blue-100',
-                                'iconText' => 'text-blue-600',
-                                'title' => 'Pemesanan Selesai'
-                            ],
-                            default => [
-                                'bg' => 'bg-gray-50',
-                                'border' => 'border-gray-400',
-                                'badge' => 'bg-gray-500',
-                                'icon' => '📢',
-                                'iconBg' => 'bg-gray-100',
-                                'iconText' => 'text-gray-600',
-                                'title' => 'Status Terbaru'
-                            ]
-                        };
-
-                        $link = "detailpermintaan_admin.php?id=" . urlencode($n['id']);
-                        $timestamp = strtotime($n['updated_at'] ?: $n['created_at']);
-                        $tanggal = date('d M Y', $timestamp);
-                        $waktu = date('H:i', $timestamp);
-                    ?>
-
-                    <a href="<?= $link ?>" 
-                       class="notification-card block bg-white rounded-xl shadow-md hover:shadow-xl border-l-4 <?= $config['border'] ?> overflow-hidden transition-all duration-300 hover:-translate-y-1"
-                       style="animation-delay: <?= $index * 0.1 ?>s;">
-                        <div class="p-5">
-                            <div class="flex items-start gap-4">
-                                <!-- Icon -->
-                                <div class="flex-shrink-0 w-12 h-12 <?= $config['iconBg'] ?> rounded-lg flex items-center justify-center text-2xl <?= $config['iconText'] ?>">
-                                    <?= $config['icon'] ?>
+            <?php if (count($new_orders) > 0): ?>
+                <div class="space-y-3">
+                    <?php foreach ($new_orders as $item): ?>
+                        <div class="bg-white border-l-4 border-amber-500 rounded-xl shadow-md p-5 hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 relative overflow-hidden group">
+                            <div class="relative flex items-start gap-4">
+                                <div class="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center flex-shrink-0 text-xl">
+                                    📩
                                 </div>
 
-                                <!-- Content -->
-                                <div class="flex-1 min-w-0">
-                                    <div class="flex items-start justify-between gap-4 mb-2">
-                                        <div class="flex-1">
-                                            <h3 class="font-bold text-lg text-gray-800 mb-1 line-clamp-1">
-                                                <?= htmlspecialchars($n['nama_ruang']) ?>
-                                            </h3>
-                                            <p class="text-sm text-gray-600 font-medium mb-1">
-                                                <?= $config['title'] ?>
+                                <div class="flex-1">
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <h3 class="font-bold text-gray-800">Permohonan Masuk</h3>
+                                            <p class="text-sm text-gray-600 mt-1">
+                                                <span class="font-semibold text-gray-900"><?= htmlspecialchars($item['nama_peminjam']) ?></span> 
+                                                mengajukan peminjaman 
+                                                <span class="font-semibold text-blue-600"><?= htmlspecialchars($item['subpilihan']) ?></span>
                                             </p>
                                         </div>
-                                        <!-- Badge -->
-                                        <span class="flex-shrink-0 px-3 py-1 rounded-full text-white text-xs font-bold <?= $config['badge'] ?> uppercase">
-                                            <?= ucfirst($n['status']) ?>
+                                        <span class="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded whitespace-nowrap">
+                                            <?= time_elapsed_string($item['created_at']) ?>
                                         </span>
                                     </div>
+                                    
+                                    <div class="mt-3 flex items-center gap-4 text-xs text-gray-500 bg-gray-50 p-2 rounded-lg border border-gray-100 w-fit">
+                                        <span class="flex items-center gap-1">📅 <?= date('d M Y', strtotime($item['tanggal_peminjaman'])) ?></span>
+                                        <span class="flex items-center gap-1">⏰ <?= substr($item['jam_mulai'],0,5) ?> - <?= substr($item['jam_selesai'],0,5) ?></span>
+                                    </div>
 
-                                    <!-- Pemohon & Timestamp -->
-                                    <div class="flex flex-wrap items-center gap-4 text-sm text-gray-500">
-                                        <div class="flex items-center gap-1.5">
-                                            <span class="text-base">👤</span>
-                                            <span class="font-medium"><?= htmlspecialchars($n['pemohon']) ?></span>
-                                        </div>
-                                        <div class="flex items-center gap-1.5">
-                                            <span class="text-base">📅</span>
-                                            <span><?= $tanggal ?></span>
-                                        </div>
-                                        <div class="flex items-center gap-1.5">
-                                            <span class="text-base">🕐</span>
-                                            <span><?= $waktu ?> WIB</span>
-                                        </div>
+                                    <div class="mt-4">
+                                        <a href="detailpermintaan_admin.php?id=<?= $item['id'] ?>" class="inline-flex items-center gap-2 text-xs bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-bold transition-colors shadow-sm">
+                                            Tinjau & Proses ➜
+                                        </a>
                                     </div>
                                 </div>
                             </div>
                         </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php else: ?>
+                <div class="bg-white/60 rounded-xl border border-dashed border-gray-300 p-8 text-center backdrop-blur-sm">
+                    <p class="text-gray-500 text-sm font-medium">✨ Tidak ada permintaan baru saat ini.</p>
+                </div>
+            <?php endif; ?>
+        </div>
 
-                        <!-- Hover Indicator -->
-                        <div class="h-1 <?= $config['bg'] ?> transition-all duration-300"></div>
+        <div>
+            <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Riwayat Aktivitas</h2>
+            
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-100 overflow-hidden">
+                <?php foreach ($logs as $log): ?>
+                    <?php 
+                        $status_color = 'bg-gray-100 text-gray-500';
+                        $icon = '📋';
+                        $msg_status = 'memperbarui status';
+                        $st = strtolower($log['status']);
+
+                        if($st == 'disetujui') {
+                            $status_color = 'bg-green-100 text-green-600';
+                            $icon = '✔';
+                            $msg_status = 'menyetujui peminjaman';
+                        } elseif($st == 'ditolak') {
+                            $status_color = 'bg-red-100 text-red-600';
+                            $icon = '✖';
+                            $msg_status = 'menolak peminjaman';
+                        }
+                    ?>
+                    <a href="detailpermintaan_admin.php?id=<?= $log['id'] ?>" class="block p-4 hover:bg-gray-50 transition-colors flex items-center gap-4 group">
+                        <div class="w-10 h-10 <?= $status_color ?> rounded-full flex items-center justify-center text-sm flex-shrink-0 group-hover:scale-110 transition-transform">
+                            <?= $icon ?>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-sm text-gray-700">
+                                Status <span class="font-bold text-gray-900"><?= htmlspecialchars($log['subpilihan']) ?></span> 
+                                diperbarui menjadi <span class="font-semibold uppercase"><?= $log['status'] ?></span>
+                            </p>
+                            <p class="text-xs text-gray-400 mt-0.5">Oleh Admin • <?= time_elapsed_string($log['updated_at']) ?></p>
+                        </div>
+                        <svg class="w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
                     </a>
                 <?php endforeach; ?>
+                
+                <?php if(count($logs) == 0): ?>
+                    <div class="p-6 text-center text-sm text-gray-400">Belum ada riwayat aktivitas.</div>
+                <?php endif; ?>
             </div>
-        <?php else: ?>
-            <!-- Empty State -->
-            <div class="bg-white rounded-2xl shadow-lg p-16 text-center">
-                <div class="w-32 h-32 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mx-auto mb-6 text-6xl">
-                    📭
-                </div>
-                <h3 class="text-2xl font-bold text-gray-800 mb-3">Tidak Ada Notifikasi</h3>
-                <p class="text-gray-600 max-w-md mx-auto">
-                    Belum ada pemesanan atau perubahan status terbaru. Notifikasi akan muncul di sini saat ada aktivitas baru.
-                </p>
-            </div>
-        <?php endif; ?>
+        </div>
+
     </div>
 </div>
 
@@ -226,6 +242,8 @@ $notifikasi = $db->resultSet();
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     const main = document.getElementById('mainContent');
+    const overlay = document.getElementById('sidebarOverlay');
+    const toggleBtn = document.getElementById('toggleBtn'); 
     const is_desktop = window.innerWidth >= 1024;
 
     if (is_desktop) {
@@ -233,9 +251,19 @@ function toggleSidebar() {
         sidebar.classList.toggle('lg:w-16');
         main.classList.toggle('lg:ml-60');
         main.classList.toggle('lg:ml-16');
+        
+        const is_expanded = sidebar.classList.contains('lg:w-60');
+        if (is_expanded) {
+            toggleBtn.style.left = '16rem'; 
+        } else {
+            toggleBtn.style.left = '5rem'; 
+        }
     } else {
         sidebar.classList.toggle('translate-x-0');
         sidebar.classList.toggle('-translate-x-full');
+        if (overlay) {
+            overlay.classList.toggle('hidden');
+        }
     }
 
     const is_expanded = sidebar.classList.contains('lg:w-60') || sidebar.classList.contains('translate-x-0');
@@ -247,36 +275,125 @@ function toggleSidebar() {
     localStorage.setItem('sidebarStatus', is_expanded ? 'open' : 'collapsed');
 }
 
-// Initialize sidebar state
-document.addEventListener("DOMContentLoaded", function() {
+    function toggleNotifDropdown(){
+        const dropdown = document.getElementById("notifDropdown");
+        dropdown.classList.toggle("hidden");
+        document.querySelector(".profile-dropdown").classList.add("hidden"); 
+    }
+
+    function toggleProfileDropdown(){
+        const dropdown = document.querySelector(".profile-dropdown");
+        dropdown.classList.toggle("hidden");
+        document.getElementById("notifDropdown").classList.add("hidden"); 
+    }
+
+    document.addEventListener('click',function(e){
+        if(!e.target.closest('.notif-wrapper') && !e.target.closest('.profile') && !e.target.closest('#toggleBtn') && !e.target.closest('#sidebar') && !e.target.closest('#sidebarOverlay')){
+            document.getElementById("notifDropdown").classList.add("hidden");
+            document.querySelector(".profile-dropdown").classList.add("hidden");
+        }
+    });
+
+    const searchInputDesktop=document.getElementById('searchInput'); 
+    const clearBtn=document.getElementById('clearBtn'); 
+    if (clearBtn && searchInputDesktop) {
+        searchInputDesktop.addEventListener('input', () => {
+            clearBtn.style.display = searchInputDesktop.value.length > 0 ? 'block' : 'none';
+        });
+        clearBtn.addEventListener('click',() => { window.location.href='dashboardadmin.php'; });
+    }
+
+ document.addEventListener("DOMContentLoaded", () => {
     const sidebar = document.getElementById("sidebar");
     const main = document.getElementById("mainContent");
+    const overlay = document.getElementById('sidebarOverlay');
+    const toggleBtn = document.getElementById('toggleBtn'); 
     const status = localStorage.getItem('sidebarStatus');
     const is_desktop = window.innerWidth >= 1024;
-    
-    if (status === 'open') {
-        if (is_desktop) {
-            main.classList.add('lg:ml-60');
-            main.classList.remove('lg:ml-16');
+
+    if (sidebar) {
+        if (status === 'open') {
+            if (is_desktop) {
+                main.classList.add('lg:ml-60');
+                main.classList.remove('lg:ml-16');
+                sidebar.classList.add('lg:w-60');
+                sidebar.classList.remove('lg:w-16');
+                toggleBtn.style.left = '16rem'; 
+            } else {
+                sidebar.classList.remove('-translate-x-full');
+                sidebar.classList.add('translate-x-0');
+                if (overlay) overlay.classList.remove('hidden');
+            }
+        } else if (status === 'collapsed') {
+            if (is_desktop) {
+                main.classList.remove('lg:ml-60');
+                main.classList.add('lg:ml-16');
+                sidebar.classList.remove('lg:w-60');
+                sidebar.classList.add('lg:w-16');
+                toggleBtn.style.left = '5rem'; 
+            } else {
+                sidebar.classList.remove('translate-x-0');
+                sidebar.classList.add('-translate-x-full');
+                if (overlay) overlay.classList.add('hidden');
+            }
+        }
+    }
+
+    if (overlay) {
+        overlay.addEventListener('click', toggleSidebar);
+    }
+
+    // Auto-hide success alert
+    const successAlert = document.getElementById('successAlert');
+    if (successAlert) {
+        setTimeout(() => {
+            successAlert.style.opacity = '0';
+            setTimeout(() => { successAlert.style.display = 'none'; }, 500);
+        }, 5000);
+    }
+});
+
+window.addEventListener('resize', () => {
+    const sidebar = document.getElementById('sidebar');
+    const main = document.getElementById('mainContent');
+    const overlay = document.getElementById('sidebarOverlay');
+    const toggleBtn = document.getElementById('toggleBtn'); 
+    const is_desktop = window.innerWidth >= 1024;
+    const status = localStorage.getItem('sidebarStatus');
+
+    if (is_desktop) {
+        sidebar.classList.remove('translate-x-0', '-translate-x-full');
+        if (overlay) overlay.classList.add('hidden');
+
+        if (status === 'open') {
             sidebar.classList.add('lg:w-60');
             sidebar.classList.remove('lg:w-16');
+            main.classList.add('lg:ml-60');
+            main.classList.remove('lg:ml-16');
+            toggleBtn.style.left = '16rem'; 
         } else {
-            sidebar.classList.remove('-translate-x-full');
-            sidebar.classList.add('translate-x-0');
+            sidebar.classList.add('lg:w-16');
+            sidebar.classList.remove('lg:w-60');
+            main.classList.add('lg:ml-16');
+            main.classList.remove('lg:ml-60');
+            toggleBtn.style.left = '5rem'; 
         }
     } else {
-        if (is_desktop) {
-            main.classList.remove('lg:ml-60');
-            main.classList.add('lg:ml-16');
-            sidebar.classList.remove('lg:w-60');
-            sidebar.classList.add('lg:w-16');
+        sidebar.classList.remove('lg:w-60', 'lg:w-16');
+        main.classList.remove('lg:ml-60', 'lg:ml-16');
+        toggleBtn.style.left = '1.25rem'; 
+
+        if (status === 'open') {
+            sidebar.classList.add('translate-x-0');
+            sidebar.classList.remove('-translate-x-full');
+            if (overlay) overlay.classList.remove('hidden');
         } else {
-            sidebar.classList.remove('translate-x-0');
             sidebar.classList.add('-translate-x-full');
+            sidebar.classList.remove('translate-x-0');
+            if (overlay) overlay.classList.add('hidden');
         }
     }
 });
 </script>
-
 </body>
 </html>

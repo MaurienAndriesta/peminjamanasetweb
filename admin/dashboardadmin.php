@@ -1,93 +1,103 @@
 <?php
-// ... (Bagian PHP tetap sama) ...
 session_start();
-<<<<<<< HEAD
-require_once 'config/database.php';
-$db = new Database();
-=======
-require_once '../koneksi.php';
+require_once '../koneksi.php'; 
 $db = $koneksi;
->>>>>>> bce18e6addb84d4411ecb401bfb0a22c57066df4
 
-// ====== Simulasi nama admin ======
-if (!isset($_SESSION['nama_admin'])) {
-    $_SESSION['nama_admin'] = 'Admin Pengelola';
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+    // header("Location: ../login.php"); 
+    // exit;
 }
-$nama_admin = $_SESSION['nama_admin'];
 
-// ... (Bagian Hitung Total Ruangan dan Statistik Pemesanan tetap sama) ...
+if (!isset($_SESSION['fullname'])) {
+    $_SESSION['fullname'] = 'Admin Pengelola';
+}
+$nama_admin = $_SESSION['fullname'];
+
+$total_ruangan = 0;
 try {
-    // Menghitung hanya ruangan yang aktif
-    $db->query("SELECT COUNT(*) as total FROM ruangan_multiguna WHERE status='aktif'");
-    $total_multiguna = $db->single()['total'] ?? 0;
+    $q1 = mysqli_query($db, "SELECT COUNT(*) as total FROM tbl_ruangmultiguna");
+    $total_multiguna = ($q1) ? mysqli_fetch_assoc($q1)['total'] : 0;
+    $q2 = mysqli_query($db, "SELECT COUNT(*) as total FROM tbl_fasilitas");
+    $total_fasilitas = ($q2) ? mysqli_fetch_assoc($q2)['total'] : 0;
+    $q3 = mysqli_query($db, "SELECT COUNT(*) as total FROM tbl_usaha");
+    $total_usaha = ($q3) ? mysqli_fetch_assoc($q3)['total'] : 0;
+    $q_lab = mysqli_query($db, "SELECT (SELECT COUNT(*) FROM labftbe) + (SELECT COUNT(*) FROM labften) + (SELECT COUNT(*) FROM labftik) + (SELECT COUNT(*) FROM labfket) AS total_lab");
+    $d_lab = ($q_lab) ? mysqli_fetch_assoc($q_lab) : ['total_lab' => 0];
+    $total_ruangan = $total_multiguna + $total_fasilitas + $d_lab['total_lab'] + $total_usaha;
+} catch (Exception $e) { $total_ruangan = 0; }
 
-    $db->query("SELECT COUNT(*) as total FROM fasilitas WHERE status='aktif'");
-    $total_fasilitas = $db->single()['total'] ?? 0;
+$pemesanan_selesai = 0; $menunggu_persetujuan = 0; $pendapatan = 0;
+$booked_data = []; 
 
-    $db->query("SELECT COUNT(*) as total FROM laboratorium WHERE status='aktif'");
-    $total_laboratorium = $db->single()['total'] ?? 0;
+$q_selesai = mysqli_query($db, "SELECT COUNT(*) as total FROM tbl_pengajuan WHERE status = 'disetujui'");
+if($q_selesai) $pemesanan_selesai = mysqli_fetch_assoc($q_selesai)['total'];
 
-    $db->query("SELECT COUNT(*) as total FROM usaha WHERE status='aktif'");
-    $total_usaha = $db->single()['total'] ?? 0;
-} catch (Exception $e) {
-    // Fallback jika query gagal
-    $total_multiguna = $total_fasilitas = $total_laboratorium = $total_usaha = 0;
-}
+$q_pending = mysqli_query($db, "SELECT COUNT(*) as total FROM tbl_pengajuan WHERE status = 'pending' OR status = 'Menunggu'");
+if($q_pending) $menunggu_persetujuan = mysqli_fetch_assoc($q_pending)['total'];
 
-$total_ruangan = $total_multiguna + $total_fasilitas + $total_laboratorium + $total_usaha;
+$q_income = mysqli_query($db, "SELECT * FROM tbl_pengajuan WHERE status = 'disetujui'");
+if($q_income){
+    while ($row = mysqli_fetch_assoc($q_income)) {
+        if (date('Y-m', strtotime($row['created_at'])) == date('Y-m')) {
+            $harga = 0; $tabel = ''; $kategori = $row['kategori'];
+            if ($kategori == 'Ruang Multiguna') $tabel = 'tbl_ruangmultiguna';
+            elseif ($kategori == 'Fasilitas') $tabel = 'tbl_fasilitas';
+            elseif ($kategori == 'Usaha') $tabel = 'tbl_usaha';
+            elseif ($kategori == 'Laboratorium') {
+                $fak = $row['fakultas'];
+                if($fak == 'FTIK') $tabel = 'labftik'; elseif($fak == 'FTEN') $tabel = 'labften'; elseif($fak == 'FKET') $tabel = 'labfket'; elseif($fak == 'FTBE') $tabel = 'labftbe';
+            }
+            if ($tabel) {
+                $nama = mysqli_real_escape_string($db, $row['subpilihan']);
+                $col_h_int = ($kategori == 'Laboratorium') ? 'tarif_sewa_laboratorium' : 'tarif_internal';
+                $col_h_eks = ($kategori == 'Laboratorium') ? 'tarif_sewa_peralatan' : 'tarif_eksternal';
+                $q_h = mysqli_query($db, "SELECT $col_h_int as internal, $col_h_eks as eksternal FROM $tabel WHERE nama = '$nama'");
+                if ($q_h && $d_h = mysqli_fetch_assoc($q_h)) {
+                    if (stripos($row['status_peminjam'], 'Mahasiswa') !== false) { $harga = 0; } 
+                    else {
+                        if ($row['tarif_sewa'] == 1) $harga = $d_h['internal'];
+                        elseif ($row['tarif_sewa'] == 2) $harga = $d_h['eksternal'];
+                        else $harga = $d_h['eksternal'];
+                    }
+                }
+            }
+            $start = new DateTime($row['tanggal_peminjaman']); $end = new DateTime($row['tanggal_selesai']);
+            $diff = $end->diff($start)->days + 1;
+            $pendapatan += ($harga * $diff);
+        }
 
-// =====================
-// Statistik Pemesanan
-// =====================
-try {
-    $db->query("SELECT COUNT(*) as total FROM pemesanan WHERE status = 'disetujui'");
-    $pemesanan_selesai = $db->single()['total'] ?? 0;
-
-    $db->query("SELECT COUNT(*) as total FROM pemesanan WHERE status = 'pending'");
-    $menunggu_persetujuan = $db->single()['total'] ?? 0;
-} catch (Exception $e) {
-    $pemesanan_selesai = $menunggu_persetujuan = 0;
-}
-
-// Catatan: Pendapatan ini adalah nilai statis (contoh)
-$pendapatan = 5000000;
-
-// =====================
-// Riwayat Permintaan (5 Terbaru)
-// =====================
-$keyword = isset($_GET['q']) ? trim($_GET['q']) : '';
-$sql = "SELECT * FROM pemesanan WHERE 1=1";
-$params = [];
-
-if ($keyword !== '') {
-    $sql .= " AND (pemohon LIKE :kw OR nama_ruang LIKE :kw)";
-    $params[':kw'] = "%$keyword%";
-}
-$sql .= " ORDER BY created_at DESC LIMIT 5";
-
-try {
-    $db->query($sql);
-    foreach ($params as $key => $value) {
-        $db->bind($key, $value);
+        $tgl_awal = $row['tanggal_peminjaman'];
+        $tgl_akhir = $row['tanggal_selesai'];
+        $aset = $row['subpilihan'];
+        try {
+            $period = new DatePeriod(new DateTime($tgl_awal), new DateInterval('P1D'), (new DateTime($tgl_akhir))->modify('+1 day'));
+            foreach ($period as $date) {
+                $tgl = $date->format('Y-m-d');
+                if (isset($booked_data[$tgl])) { $booked_data[$tgl] .= ", " . $aset; } 
+                else { $booked_data[$tgl] = $aset; }
+            }
+        } catch(Exception $e){}
     }
-    $riwayat = $db->resultSet();
-} catch (Exception $e) {
-    $riwayat = [];
 }
+$json_booked_data = json_encode($booked_data);
 
+$riwayat = []; 
+$keyword = isset($_GET['q']) ? mysqli_real_escape_string($db, $_GET['q']) : '';
+$sql_riwayat = "SELECT * FROM tbl_pengajuan WHERE 1=1";
+if ($keyword !== '') { $sql_riwayat .= " AND (nama_peminjam LIKE '%$keyword%' OR subpilihan LIKE '%$keyword%')"; }
+$sql_riwayat .= " ORDER BY created_at DESC LIMIT 5";
+$q_riwayat = mysqli_query($db, $sql_riwayat);
+if ($q_riwayat) { while ($r = mysqli_fetch_assoc($q_riwayat)) { $riwayat[] = $r; } }
 
-// =====================
-// Notifikasi Terbaru
-// =====================
-try {
-    $db->query("SELECT * FROM notifikasi WHERE status='baru' ORDER BY tanggal DESC LIMIT 5");
-    $notifikasi = $db->resultSet();
-    $jumlah_notif = count($notifikasi);
-} catch (Exception $e) {
-    $notifikasi = [];
-    $jumlah_notif = 0;
+$notifikasi = []; $jumlah_notif = 0;
+$q_notif = mysqli_query($db, "SELECT * FROM tbl_pengajuan WHERE status IN ('pending', 'Menunggu') ORDER BY created_at DESC LIMIT 5");
+if ($q_notif) {
+    while ($rn = mysqli_fetch_assoc($q_notif)) { $notifikasi[] = $rn; }
+    $q_c = mysqli_query($db, "SELECT COUNT(*) as total FROM tbl_pengajuan WHERE status IN ('pending', 'Menunggu')");
+    $jumlah_notif = mysqli_fetch_assoc($q_c)['total'];
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -95,200 +105,318 @@ try {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard Admin Pengelola</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
 <style>
-/* CSS umum dan Poppins */
-body {  
-    font-family: 'Poppins', sans-serif; 
-}
-.text-dark-accent {
-    color: #202938;
-}
+    body { font-family: 'Poppins', sans-serif; background-color: #ffffff; overflow-x: hidden; }
+    .text-dark-accent { color: #1e293b; }
 
-/* Memastikan Sidebar menggunakan z-index tinggi di mobile dan posisi tetap */
-@media (min-width: 1024px) {
-    .main { margin-left: 4rem; }
-    .main.lg\:ml-60 { margin-left: 15rem; }
-}
-@media (max-width: 1023px) {
-    .main { margin-left: 0 !important; }
-}
+    .main { transition: margin-left 0.3s ease-in-out; }
+    @media (min-width: 1024px) { .main { margin-left: 16rem; } }
+    @media (max-width: 1023px) { .main { margin-left: 0 !important; } }
 
-/* Menetapkan z-index pada header agar tidak menutupi dropdown notif/profil */
-.header {
-    z-index: 40; 
-}
+    #sidebar { position: fixed; z-index: 50; top: 0; left: 0; height: 100%; box-shadow: 4px 0 24px rgba(0,0,0,0.1); }
+    #sidebar.lg\:w-16 .sidebar-text { display: none; }
+    #sidebar.lg\:w-60 .sidebar-text { display: inline; }
+    @media (max-width: 1023px) { .sidebar-text { display: inline !important; } }
 
-/* REVISI CSS UNTUK TOMBOL TOGGLE */
-#toggleBtn {
-    position: fixed; 
-    top: 1.25rem; 
-    left: 1.25rem; 
-    z-index: 60 !important; 
-    transition: left 0.3s ease; 
-}
-/* END REVISI CSS */
+    .header-panel {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        border-radius: 1rem;
+        z-index: 40;
+    }
+    
+    .list-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        border-radius: 1rem;
+        transition: all 0.3s ease;
+    }
+    .list-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 16px rgba(0,0,0,0.08);
+    }
 
-/* Menambahkan style fixed z-index 50 untuk konsistensi sidebar */
-#sidebar {
-    position: fixed;
-    z-index: 50; 
-    top: 0;
-    left: 0;
-    height: 100%;
-}
+    .stat-card { 
+        position: relative; overflow: hidden; border-radius: 1.5rem; padding: 1.75rem; 
+        box-shadow: 0 10px 20px -5px rgba(0,0,0,0.15); 
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+        border: 1px solid rgba(255,255,255,0.2);
+    }
+    .stat-card:hover { transform: translateY(-6px); box-shadow: 0 20px 30px -5px rgba(0,0,0,0.25); }
+    
+    .stat-card::before {
+        content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+        background: linear-gradient(135deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0) 60%);
+        pointer-events: none;
+    }
+    .stat-icon-bg { position: absolute; right: -15px; bottom: -20px; font-size: 6.5rem; opacity: 0.25; transform: rotate(-15deg); }
 
-
-/* === Custom Card Style === */
-.stat-card {
-    position: relative;
-    border-radius: 1rem;
-    padding: 1.5rem;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    transition: all 0.3s ease;
-    overflow: hidden;
-    cursor: default;
-    display: flex;
-    flex-direction: column;
-}
-.stat-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-}
-.stat-icon {
-    font-size: 2.25rem;
-    opacity: 0.9;
-    position: absolute;
-    right: 1rem;
-    top: 1rem;
-}
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; gap: 0.4rem; }
+    .cal-day-name { font-size: 0.7rem; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em; }
+    .cal-date { 
+        height: 2.2rem; width: 2.2rem; margin: 0 auto; 
+        display: flex; align-items: center; justify-content: center; 
+        border-radius: 0.75rem; font-size: 0.85rem; font-weight: 600; 
+        transition: all 0.2s; cursor: default;
+    }
+    .is-today { background: #2563EB; color: white; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3); }
+    .is-booked { background: #EF4444; color: white; cursor: pointer; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3); }
+    .is-free:hover { background: #F1F5F9; }
+    
+    @keyframes ring { 0%{transform:rotate(0)} 10%{transform:rotate(15deg)} 20%{transform:rotate(-15deg)} 30%{transform:rotate(10deg)} 40%{transform:rotate(-10deg)} 50%{transform:rotate(0)} }
+    .bell-ring { animation: ring 2s ease-in-out infinite; color: #F59E0B; }
+    .animate-fade-in { animation: fadeIn 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
-<body class="bg-blue-100 flex min-h-screen text-gray-800">
+<body class="bg-blue-100 min-h-screen">
 
-<div id="sidebarOverlay" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden lg:hidden"></div>
+<div id="sidebarOverlay" class="fixed inset-0 bg-black/60 hidden lg:hidden z-40" onclick="toggleSidebar()"></div>
 
-<?php 
-include 'sidebar_admin.php'; 
-?>
+<?php include 'sidebar_admin.php'; ?>
 
-<button class="hamburger bg-amber-500 hover:bg-amber-600 text-gray-900 p-2 rounded-lg transition-colors shadow-md" id="toggleBtn" onclick="toggleSidebar()">
-    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-    </svg>
-</button>
-<div id="mainContent" class="main flex-1 p-5 transition-all duration-300 lg:ml-16">
-    <div class="header sticky top-0 bg-blue-100/95 backdrop-blur-sm z-40 py-2 -mx-5 px-5 flex justify-end items-center mb-5 border-b border-gray-200 relative">
+<div id="mainContent" class="main flex-1 p-6 lg:p-10 min-h-screen relative z-10">
+    
+    <div class="header-panel p-4 mb-10 sticky top-4 z-50 flex flex-col md:flex-row justify-between items-center gap-4 transition-all duration-300">
         
-        <form method="get" class="absolute left-1/2 -translate-x-1/2 flex items-center max-w-sm flex-grow mx-4 md:mx-0 md:flex-grow-0 w-full lg:w-96 hidden lg:flex">
-            <input type="text" name="q" id="searchInput" placeholder="Cari Permintaan..." value="<?= htmlspecialchars($keyword) ?>" class="w-full px-3 py-2 rounded-full border border-gray-300 text-sm focus:ring-amber-500 focus:border-amber-500">
-            <span class="search-clear absolute right-3 text-gray-500 text-lg cursor-pointer <?= $keyword !== '' ? 'block' : 'hidden' ?>" id="clearBtn" title="Hapus Pencarian">&times;</span>
-        </form>
+        <div class="flex items-center gap-4 w-full md:w-auto">
+            <button id="toggleBtn" onclick="toggleSidebar()" class="bg-amber-500 text-white p-2.5 rounded-xl shadow-lg hover:bg-amber-600 active:scale-95 transition-all">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+            </button>
 
-        <form method="get" class="relative flex items-center max-w-sm flex-grow mx-4 md:mx-0 md:flex-grow-0 lg:hidden">
-            <input type="text" name="q" id="searchInputMobile" placeholder="Cari Permintaan..." value="<?= htmlspecialchars($keyword) ?>" class="w-full px-3 py-2 rounded-full border border-gray-300 text-sm focus:ring-amber-500 focus:border-amber-500">
+            <form method="get" class="relative flex-1 md:w-80">
+                <span class="absolute inset-y-0 left-0 pl-4 flex items-center text-blue-500">
+                    <i class="fas fa-search text-lg"></i>
+                </span>
+                <input type="text" name="q" placeholder="Cari Permintaan..." value="<?= htmlspecialchars($keyword) ?>" 
+                    class="w-full pl-12 pr-5 py-2.5 bg-white border border-gray-200 rounded-full text-sm font-medium focus:ring-4 focus:ring-blue-200/50 transition-all outline-none shadow-sm placeholder-gray-400">
             </form>
+        </div>
 
-        <div class="flex items-center gap-5">
-            <div class="notif-wrapper relative">
-                <div class="notif-icon text-xl cursor-pointer transition-transform text-gray-600 hover:text-orange-600" onclick="toggleNotifDropdown()">🔔
-                    <?php if ($jumlah_notif > 0): ?>
-                        <span class="notif-badge absolute -top-1 -right-1 bg-orange-600 text-white text-xs px-2 py-0.5 rounded-full font-bold leading-none"><?= $jumlah_notif ?></span>
+        <div class="flex items-center gap-6 pr-2">
+            <div class="relative">
+                <button id="notifBtn" class="relative p-2.5 rounded-full bg-white hover:bg-gray-50 text-slate-600 hover:text-amber-500 transition-all shadow-sm border border-gray-200 <?= $jumlah_notif > 0 ? 'bell-ring' : '' ?>">
+                    <i class="fas fa-bell text-xl"></i>
+                    <?php if($jumlah_notif > 0): ?>
+                        <span class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white shadow-sm">
+                            <?= $jumlah_notif ?>
+                        </span>
                     <?php endif; ?>
-                </div>
-                <div class="notif-dropdown hidden absolute right-0 top-10 w-72 bg-white shadow-xl rounded-xl overflow-hidden z-50 border border-gray-200" id="notifDropdown">
-                    <div class="notif-header flex justify-between items-center bg-orange-200 px-3 py-2 font-semibold text-sm border-b">
-                        <strong>Notifikasi Terbaru</strong>
-                        <a href="notifikasi_admin.php" class="text-orange-700 text-xs hover:underline">Lihat Semua</a>
-                    </div>
-                    <div class="notif-list max-h-56 overflow-y-auto">
-                        <?php if ($notifikasi): foreach ($notifikasi as $n): ?>
-                            <div class="notif-item px-3 py-2 border-b border-gray-100 text-sm cursor-pointer hover:bg-orange-50 transition-colors" onclick="markAsRead(<?= $n['id'] ?>)">
-                                <div><?= htmlspecialchars($n['judul']) ?></div>
-                                <small class="text-gray-500 text-xs"><?= date('d M Y, H:i', strtotime($n['tanggal'])) ?></small>
-                            </div>
-                        <?php endforeach; else: ?>
-                            <div class="notif-item text-center text-gray-500 italic py-4">Tidak ada notifikasi baru</div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-
-            <div class="profile relative flex items-center gap-2 font-semibold cursor-pointer select-none text-dark-accent" onclick="toggleProfileDropdown()">
-                👤 <span class="hidden sm:inline"><?= htmlspecialchars($nama_admin) ?></span> ⏷
-                <div class="profile-dropdown hidden absolute right-0 top-10 bg-white rounded-xl shadow-lg overflow-hidden z-50 w-44 border border-gray-200">
-                    <a href="profil_admin.php" class="block px-4 py-2 text-gray-800 text-sm border-b border-gray-100 hover:bg-amber-50 hover:text-dark-accent">👤 Profil Saya</a>
-                    <a href="../halamanutama.php" onclick="logoutAdmin()" class="block px-4 py-2 text-gray-800 text-sm hover:bg-red-50 hover:text-red-700">🚪 Keluar</a>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <h2 class="text-2xl font-bold mb-5 text-dark-accent">Ringkasan Statistik</h2>
-    <div class="stats grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-        
-        <div class="stat-card bg-gray-700 text-white">
-            <div class="stat-icon text-gray-400">🏢</div>
-            <div class="text-sm opacity-90 mb-1">TOTAL RUANGAN IT PLN</div>
-            <span class="text-4xl font-extrabold mt-1"><?= $total_ruangan ?></span>
-        </div>
-        
-        <div class="stat-card bg-green-500 text-white">
-            <div class="stat-icon text-green-200">✅</div>
-            <div class="text-sm opacity-90 mb-1">PEMESANAN SELESAI</div>
-            <span class="text-4xl font-extrabold mt-1"><?= $pemesanan_selesai ?></span>
-        </div>
-        
-        <div class="stat-card bg-yellow-400 text-gray-900">
-            <div class="stat-icon text-yellow-700">⏳</div>
-            <div class="text-sm opacity-90 mb-1">MENUNGGU PERSETUJUAN</div>
-            <span class="text-4xl font-extrabold mt-1"><?= $menunggu_persetujuan ?></span>
-        </div>
-        
-        <div class="stat-card bg-red-500 text-white">
-            <div class="stat-icon text-red-200">💸</div>
-            <div class="text-sm opacity-90 mb-1">PENDAPATAN BULAN INI</div>
-            <span class="text-3xl font-extrabold mt-1">Rp <?= number_format($pendapatan,0,',','.') ?></span>
-        </div>
-    </div>
-
-    <div class="riwayat">
-        <h2 class="text-2xl font-bold mb-5 text-dark-accent">Riwayat Permintaan</h2>
-        <?php if ($riwayat): foreach($riwayat as $r): ?>
-            <div class="bg-blue-50 p-4 rounded-xl mb-3 flex flex-col md:flex-row justify-between items-start md:items-center shadow-md hover:shadow-lg transition-all duration-200">
-                <div class="mb-2 md:mb-0 max-w-full md:max-w-[70%]">
-                    <strong class="block text-lg text-dark-accent"><?= htmlspecialchars($r['nama_ruang']); ?></strong>
-                    <div class="text-gray-600 text-sm space-x-2">
-                        <span>Pemohon: <?= htmlspecialchars($r['pemohon']); ?></span>
-                        <span class="text-gray-400">|</span>
-                        <span><?= date('d/m/Y', strtotime($r['tanggal_mulai'])); ?> - <?= date('d/m/Y', strtotime($r['tanggal_selesai'])); ?></span>
-                    </div>
-                </div>
+                </button>
                 
-                <div class="flex items-center gap-3">
-                    <?php if($r["status"]=="pending"): ?>
-                        <span class="bg-yellow-300 text-gray-800 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap">Pending</span>
-                    <?php elseif($r["status"]=="disetujui"): ?>
-                        <span class="bg-green-300 text-gray-900 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap">Disetujui</span>
-                    <?php else: ?>
-                        <span class="bg-red-300 text-gray-900 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap">Ditolak</span>
-                    <?php endif; ?>
-                    <a href="detailpermintaan_admin.php?id=<?= $r['id']; ?>" class="text-dark-accent font-semibold hover:text-gray-900 transition-colors whitespace-nowrap">Lihat & Proses</a>
+                <div id="notifDropdown" class="hidden absolute right-0 mt-4 w-80 bg-white rounded-2xl shadow-2xl border border-gray-200 z-50 overflow-hidden animate-fade-in">
+                    <div class="px-5 py-3 bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-100 font-bold text-xs text-amber-800 uppercase flex justify-between items-center">
+                        <span>Notifikasi</span>
+                        <span class="bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full text-[10px]"><?= $jumlah_notif ?> Baru</span>
+                    </div>
+                    <div class="max-h-64 overflow-y-auto">
+                        <?php if(!empty($notifikasi)): foreach($notifikasi as $n): ?>
+                            <a href="detailpermintaan_admin.php?id=<?= $n['id'] ?>" class="block px-5 py-3 hover:bg-blue-50 border-b border-gray-50 last:border-0 transition-colors">
+                                <div class="flex justify-between items-start mb-1">
+                                    <p class="text-sm font-bold text-gray-800 truncate w-3/4"><?= htmlspecialchars($n['nama_peminjam']) ?></p>
+                                    <span class="text-[10px] text-gray-400 font-medium"><?= date('d/m', strtotime($n['created_at'])) ?></span>
+                                </div>
+                                <p class="text-xs text-gray-500 truncate">Mengajukan: <span class="text-gray-700 font-medium"><?= htmlspecialchars($n['subpilihan']) ?></span></p>
+                            </a>
+                        <?php endforeach; else: ?>
+                            <div class="p-8 text-center text-gray-400">
+                                <i class="far fa-bell-slash text-3xl mb-2 opacity-50"></i>
+                                <p class="text-xs">Tidak ada notifikasi.</p>
+                            </div>
+                        <?php endif; ?>
+                        <div class="border-t border-gray-200 p-3">
+        <a href="notifikasi_admin.php" class="block text-center text-sm font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 py-2 rounded-lg transition-colors">
+            Lihat Semua Notifikasi <i class="fas fa-arrow-right ml-1"></i>
+        </a>
+    </div>
+                    </div>
                 </div>
             </div>
-        <?php endforeach; else: ?>
-            <p class="text-gray-500 italic p-4 bg-white rounded-xl shadow-md">Belum ada permintaan.</p>
-        <?php endif; ?>
+
+            <div class="relative">
+                <button id="profileBtn" class="flex items-center gap-3 pl-4 border-l border-gray-300/50 focus:outline-none">
+                    <div class="text-right hidden md:block leading-tight">
+                        <p class="text-sm font-bold text-gray-800"><?= htmlspecialchars($nama_admin) ?></p>
+                        <p class="text-[10px] text-blue-600 font-bold tracking-wide uppercase bg-blue-100 px-2 py-0.5 rounded-full inline-block mt-0.5">Admin</p>
+                    </div>
+                    <div class="w-11 h-11 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 p-0.5 shadow-lg cursor-pointer hover:scale-105 transition-transform">
+                        <div class="w-full h-full bg-white rounded-full flex items-center justify-center text-blue-600 font-bold text-lg">
+                            <?= strtoupper(substr($nama_admin, 0, 1)) ?>
+                        </div>
+                    </div>
+                </button>
+
+                <div id="profileDropdown" class="hidden absolute right-0 mt-4 w-48 bg-white rounded-2xl shadow-2xl border border-gray-200 z-50 overflow-hidden animate-fade-in">
+                    <div class="py-1">
+                        <a href="profil_admin.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors">
+                            <i class="far fa-user-circle mr-2"></i> Profil Saya
+                        </a>
+                        <div class="border-t border-gray-100 my-1"></div>
+                        <a href="../halamanutama.php" onclick="return confirm('Yakin ingin keluar?')" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors">
+                            <i class="fas fa-sign-out-alt mr-2"></i> Keluar
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mb-8 animate-fade-in">
+        <h1 class="text-3xl font-extrabold text-slate-800">Dashboard Pengelola</h1>
+        <p class="text-slate-500 mt-1">Ringkasan aktivitas peminjaman aset kampus.</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-10 animate-fade-in">
+        
+        <div class="stat-card bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white">
+            <div class="relative z-10">
+                <p class="text-indigo-100 text-xs font-bold uppercase tracking-wider mb-1">Total Aset</p>
+                <h3 class="text-4xl font-black tracking-tight"><?= $total_ruangan ?></h3>
+            </div>
+            <i class="fas fa-building stat-icon-bg text-white"></i>
+        </div>
+
+        <div class="stat-card bg-gradient-to-br from-emerald-400 to-teal-600 text-white">
+            <div class="relative z-10">
+                <p class="text-emerald-100 text-xs font-bold uppercase tracking-wider mb-1">Selesai</p>
+                <h3 class="text-4xl font-black tracking-tight"><?= $pemesanan_selesai ?></h3>
+            </div>
+            <i class="fas fa-clipboard-check stat-icon-bg text-white"></i>
+        </div>
+
+        <div class="stat-card bg-gradient-to-br from-amber-400 to-orange-500 text-white">
+            <div class="relative z-10">
+                <p class="text-amber-100 text-xs font-bold uppercase tracking-wider mb-1">Menunggu</p>
+                <h3 class="text-4xl font-black tracking-tight"><?= $menunggu_persetujuan ?></h3>
+            </div>
+            <i class="fas fa-clock stat-icon-bg text-white"></i>
+        </div>
+
+        <div class="stat-card bg-gradient-to-br from-rose-500 to-red-600 text-white">
+            <div class="relative z-10">
+                <p class="text-rose-100 text-xs font-bold uppercase tracking-wider mb-1">Pendapatan (Bulan Ini)</p>
+                <h3 class="text-2xl font-black tracking-tight">Rp <?= number_format($pendapatan, 0, ',', '.') ?></h3>
+            </div>
+            <i class="fas fa-wallet stat-icon-bg text-white"></i>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-8 animate-fade-in" style="animation-delay: 0.2s;">
+        
+        <div class="xl:col-span-2 bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="font-bold text-slate-700 text-lg flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center"><i class="fas fa-history"></i></span>
+                    Permintaan Terbaru
+                </h3>
+                <a href="permintaan_admin.php" class="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors">
+                    Lihat Semua <i class="fas fa-arrow-right ml-1"></i>
+                </a>
+            </div>
+            
+            <div class="space-y-3">
+                <?php if(!empty($riwayat)): foreach($riwayat as $r): 
+                    $st = strtolower($r['status']);
+                    $bgRow = "bg-white"; $borderL = "border-l-4 border-gray-300"; $iconSt = "fa-clock text-gray-400"; $textSt = "Pending";
+                    
+                    if($st == 'pending' || $st == 'menunggu') {
+                        $bgRow = "hover:bg-amber-50"; $borderL = "border-l-4 border-amber-400"; $iconSt = "fa-hourglass-start text-amber-500"; $textSt = "Pending";
+                    } elseif($st == 'disetujui') {
+                        $bgRow = "hover:bg-emerald-50"; $borderL = "border-l-4 border-emerald-500"; $iconSt = "fa-check-circle text-emerald-500"; $textSt = "Disetujui";
+                    } elseif($st == 'ditolak') {
+                        $bgRow = "hover:bg-red-50"; $borderL = "border-l-4 border-red-500"; $iconSt = "fa-times-circle text-red-500"; $textSt = "Ditolak";
+                    }
+                ?>
+                <div class="list-card p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 <?= $bgRow ?> <?= $borderL ?>">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-500 font-bold text-sm shadow-inner">
+                            <?= strtoupper(substr($r['nama_peminjam'], 0, 2)) ?>
+                        </div>
+                        <div>
+                            <h4 class="text-sm font-bold text-gray-800"><?= htmlspecialchars($r['subpilihan']) ?></h4>
+                            <p class="text-xs text-gray-500 flex items-center gap-1">
+                                <i class="fas fa-user-circle text-gray-400"></i> <?= htmlspecialchars($r['nama_peminjam']) ?>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-1.5 text-xs font-bold bg-white px-3 py-1.5 rounded-full shadow-sm border border-gray-100">
+                            <i class="fas <?= $iconSt ?>"></i> <span class="text-gray-600"><?= $textSt ?></span>
+                        </div>
+                        <a href="detailpermintaan_admin.php?id=<?= $r['id'] ?>" class="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-400 hover:text-blue-600 transition-all shadow-sm">
+                            <i class="fas fa-chevron-right text-xs"></i>
+                        </a>
+                    </div>
+                </div>
+                <?php endforeach; else: ?>
+                    <div class="py-10 text-center"><p class="text-sm text-slate-400">Belum ada permintaan.</p></div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <div class="xl:col-span-1 bg-white border border-gray-200 rounded-2xl shadow-sm p-6 h-fit">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="font-bold text-gray-700 flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center"><i class="far fa-calendar-alt"></i></span>
+                    Kalender
+                </h3>
+                <div class="flex gap-1">
+                    <button class="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600" onclick="changeMonth(-1)"><i class="fas fa-chevron-left text-xs"></i></button>
+                    <button class="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600" onclick="changeMonth(1)"><i class="fas fa-chevron-right text-xs"></i></button>
+                </div>
+            </div>
+            <div class="text-center font-bold text-indigo-800 mb-4 text-sm tracking-wide" id="calendarTitle">...</div>
+            <div class="calendar-container bg-gray-50 rounded-xl p-3">
+                <div class="cal-grid mb-2">
+                    <div class="cal-day-name">M</div><div class="cal-day-name">S</div><div class="cal-day-name">S</div>
+                    <div class="cal-day-name">R</div><div class="cal-day-name">K</div><div class="cal-day-name">J</div>
+                    <div class="cal-day-name">S</div>
+                </div>
+                <div id="calendarGrid" class="cal-grid"></div>
+            </div>
+            <div class="mt-4 pt-4 border-t border-gray-200">
+                <div id="bookingInfo" class="text-xs text-slate-500 text-center italic bg-gray-50 p-3 rounded-xl">Klik tanggal merah untuk detail.</div>
+            </div>
+        </div>
     </div>
 </div>
 
+
 <script>
-// PENTING: Fungsi toggleSidebar() yang KONSISTEN
+// === DROPDOWN TOGGLE LOGIC ===
+const notifBtn = document.getElementById('notifBtn');
+const notifDropdown = document.getElementById('notifDropdown');
+const profileBtn = document.getElementById('profileBtn');
+const profileDropdown = document.getElementById('profileDropdown');
+
+notifBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    notifDropdown.classList.toggle('hidden');
+    profileDropdown.classList.add('hidden');
+});
+
+profileBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    profileDropdown.classList.toggle('hidden');
+    notifDropdown.classList.add('hidden');
+});
+
+document.addEventListener('click', (e) => {
+    if (!notifBtn.contains(e.target) && !notifDropdown.contains(e.target)) notifDropdown.classList.add('hidden');
+    if (!profileBtn.contains(e.target) && !profileDropdown.contains(e.target)) profileDropdown.classList.add('hidden');
+});
+
+// --- SIDEBAR & LAYOUT ---
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     const main = document.getElementById('mainContent');
     const overlay = document.getElementById('sidebarOverlay');
-    const toggleBtn = document.getElementById('toggleBtn'); // Ambil toggle button
+    const toggleBtn = document.getElementById('toggleBtn'); 
     const is_desktop = window.innerWidth >= 1024;
 
     if (is_desktop) {
@@ -297,20 +425,15 @@ function toggleSidebar() {
         main.classList.toggle('lg:ml-60');
         main.classList.toggle('lg:ml-16');
         
-        // KODE REVISI: Geser tombol toggle di desktop
         const is_expanded = sidebar.classList.contains('lg:w-60');
         if (is_expanded) {
-             // Jika sidebar terbuka (15rem), pindahkan tombol ke kanan
             toggleBtn.style.left = '16rem'; 
         } else {
-             // Jika sidebar tertutup (4rem), pindahkan tombol di samping sidebar kecil
             toggleBtn.style.left = '5rem'; 
         }
-
     } else {
         sidebar.classList.toggle('translate-x-0');
         sidebar.classList.toggle('-translate-x-full');
-        // Di mobile, tombol toggle tetap di kiri (1.25rem)
         if (overlay) {
             overlay.classList.toggle('hidden');
         }
@@ -318,7 +441,6 @@ function toggleSidebar() {
 
     const is_expanded = sidebar.classList.contains('lg:w-60') || sidebar.classList.contains('translate-x-0');
     
-    // Asumsi fungsi updateSidebarVisibility ada di sidebar_admin.php
     if (typeof updateSidebarVisibility === 'function') {
         updateSidebarVisibility(is_expanded);
     }
@@ -326,124 +448,60 @@ function toggleSidebar() {
     localStorage.setItem('sidebarStatus', is_expanded ? 'open' : 'collapsed');
 }
 
-// Notifikasi dan Profil
-function toggleNotifDropdown(){
-    const dropdown = document.getElementById("notifDropdown");
-    dropdown.classList.toggle("hidden");
-    document.querySelector(".profile-dropdown").classList.add("hidden"); 
-}
-function toggleProfileDropdown(){
-    const dropdown = document.querySelector(".profile-dropdown");
-    dropdown.classList.toggle("hidden");
-    document.getElementById("notifDropdown").classList.add("hidden"); 
-}
-document.addEventListener('click',function(e){
-    // Tambahkan kondisi untuk tidak menutup saat klik toggle button atau sidebar/overlay
-    if(!e.target.closest('.notif-wrapper') && !e.target.closest('.profile') && !e.target.closest('#toggleBtn') && !e.target.closest('#sidebar') && !e.target.closest('#sidebarOverlay')){
-        document.getElementById("notifDropdown").classList.add("hidden");
-        document.querySelector(".profile-dropdown").classList.add("hidden");
-    }
-});
+// --- KALENDER LOGIC ---
+const bookedData = <?= $json_booked_data; ?>; 
+let currDate = new Date();
+const monthNames = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 
-// Tombol clear search
-const searchInputMobile=document.getElementById('searchInputMobile'); // Hanya untuk mobile
-const searchInputDesktop=document.getElementById('searchInput'); // Hanya untuk desktop
-const clearBtn=document.getElementById('clearBtn'); // Hanya untuk desktop
-
-// Fungsi untuk memperbarui tampilan tombol X
-function updateClearBtn(){
-    // Hanya berlaku untuk pencarian desktop
-    if (clearBtn && searchInputDesktop) {
-        clearBtn.style.display = searchInputDesktop.value.length > 0 ? 'block' : 'none';
-    }
-}
-updateClearBtn();
-// Gunakan input desktop untuk event listener karena input mobile tampil bersama tombol clear
-if (searchInputDesktop) {
-    searchInputDesktop.addEventListener('input',updateClearBtn);
-}
-if (clearBtn) {
-    clearBtn.addEventListener('click',() => {
-        // Arahkan ke dashboard tanpa parameter apapun
-        window.location.href='dashboardadmin.php';
-    });
-}
-// Tambahan: jika ada input di mobile, harusnya refresh untuk clear
-if (searchInputMobile) {
-    searchInputMobile.addEventListener('input', () => {
-        // Anda mungkin perlu logika clear yang terpisah untuk mobile jika tidak menggunakan tombol X
-    });
-}
-
-
-// Notifikasi dibaca
-function markAsRead(id){
-    // Ganti update_notifikasi.php dengan path yang benar
-    fetch('update_notifikasi.php', {
-        method:'POST',
-        headers:{'Content-Type':'application/x-www-form-urlencoded'},
-        body:'id='+id
-    }).then(r=>r.text()).then(res=>{
-        if(res==='ok'){location.reload();}
-    });
-}
-
-// Logout
-function logoutAdmin(){
-    if(confirm("Yakin ingin keluar?")){
-        // Arahkan ke halaman utama user
-        window.location.href = '../halamanutama.php';
-    }
-}
-
-// === DOMContentLoaded (Restore State saat Load) ===
-document.addEventListener("DOMContentLoaded", () => {
-    const sidebar = document.getElementById("sidebar");
-    const main = document.getElementById("mainContent");
-    const overlay = document.getElementById('sidebarOverlay');
-    const toggleBtn = document.getElementById('toggleBtn'); 
-    const status = localStorage.getItem('sidebarStatus');
-    const is_desktop = window.innerWidth >= 1024;
-
-    if (sidebar) {
-        // Restore state saat load
-        if (status === 'open') {
-            if (is_desktop) {
-                main.classList.add('lg:ml-60');
-                main.classList.remove('lg:ml-16');
-                sidebar.classList.add('lg:w-60');
-                sidebar.classList.remove('lg:w-16');
-                // Posisikan tombol toggle saat dibuka (lebar 15rem + 1rem)
-                toggleBtn.style.left = '16rem'; 
-            } else {
-                sidebar.classList.remove('-translate-x-full');
-                sidebar.classList.add('translate-x-0');
-                if (overlay) overlay.classList.remove('hidden');
-            }
-        } else if (status === 'collapsed') {
-            if (is_desktop) {
-                main.classList.remove('lg:ml-60');
-                main.classList.add('lg:ml-16');
-                sidebar.classList.remove('lg:w-60');
-                sidebar.classList.add('lg:w-16');
-                // Posisikan tombol toggle saat ditutup (lebar 4rem + 1rem)
-                toggleBtn.style.left = '5rem'; 
-            } else {
-                sidebar.classList.remove('translate-x-0');
-                sidebar.classList.add('-translate-x-full');
-                if (overlay) overlay.classList.add('hidden');
-            }
+function renderCalendar() {
+    const year = currDate.getFullYear();
+    const month = currDate.getMonth();
+    document.getElementById('calendarTitle').innerText = `${monthNames[month]} ${year}`;
+    const grid = document.getElementById('calendarGrid');
+    grid.innerHTML = "";
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    
+    for(let i=0; i<firstDay; i++){ grid.appendChild(document.createElement("div")); }
+    
+    for(let i=1; i<=daysInMonth; i++){
+        const div = document.createElement("div");
+        div.innerText = i;
+        div.className = "cal-date is-free"; 
+        const monthStr = String(month + 1).padStart(2, '0');
+        const dayStr = String(i).padStart(2, '0');
+        const fullDate = `${year}-${monthStr}-${dayStr}`;
+        
+        if (bookedData[fullDate]) {
+            div.className = "cal-date is-booked"; 
+            div.onclick = function() { showInfo(fullDate); };
         }
+        grid.appendChild(div);
     }
+}
 
-    // Tambahkan listener untuk menutup sidebar saat overlay diklik
-    if (overlay) {
-        overlay.addEventListener('click', toggleSidebar);
+function changeMonth(dir) {
+    currDate.setMonth(currDate.getMonth() + dir);
+    renderCalendar();
+}
+
+function showInfo(dateStr) {
+    const infoBox = document.getElementById('bookingInfo');
+    const desc = bookedData[dateStr];
+    infoBox.innerHTML = `<span class="font-bold text-blue-600 block mb-1">${dateStr}</span> ${desc}`;
+    infoBox.className = "text-xs bg-white p-3 rounded-xl text-gray-700 border border-gray-200 shadow-sm text-left";
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    renderCalendar();
+    const sidebar = document.getElementById('sidebar');
+    // Restore Sidebar
+    if (localStorage.getItem('sidebarStatus') === 'open' && window.innerWidth >= 1024) {
+        sidebar.classList.add('lg:w-60'); sidebar.classList.remove('lg:w-16');
+        document.querySelector('.main').classList.add('lg:ml-60'); document.querySelector('.main').classList.remove('lg:ml-16');
     }
 });
 
-
-// === Penanganan Resize (KONSISTEN DENGAN EDITPERMINTAAN) ===
 window.addEventListener('resize', () => {
     const sidebar = document.getElementById('sidebar');
     const main = document.getElementById('mainContent');
@@ -453,32 +511,27 @@ window.addEventListener('resize', () => {
     const status = localStorage.getItem('sidebarStatus');
 
     if (is_desktop) {
-        // Pastikan transisi mobile dihilangkan
         sidebar.classList.remove('translate-x-0', '-translate-x-full');
         if (overlay) overlay.classList.add('hidden');
 
-        // Terapkan state desktop
         if (status === 'open') {
             sidebar.classList.add('lg:w-60');
             sidebar.classList.remove('lg:w-16');
             main.classList.add('lg:ml-60');
             main.classList.remove('lg:ml-16');
-            toggleBtn.style.left = '16rem'; // Posisikan tombol toggle saat dibuka
+            toggleBtn.style.left = '16rem'; 
         } else {
             sidebar.classList.add('lg:w-16');
             sidebar.classList.remove('lg:w-60');
             main.classList.add('lg:ml-16');
             main.classList.remove('lg:ml-60');
-            toggleBtn.style.left = '5rem'; // Posisikan tombol toggle saat ditutup
+            toggleBtn.style.left = '5rem'; 
         }
-        updateClearBtn(); // Update tombol clear desktop
     } else {
-        // Pastikan transisi desktop dihilangkan
         sidebar.classList.remove('lg:w-60', 'lg:w-16');
         main.classList.remove('lg:ml-60', 'lg:ml-16');
-        toggleBtn.style.left = '1.25rem'; // Reset posisi ke kiri atas di mobile
+        toggleBtn.style.left = '1.25rem'; 
 
-        // Terapkan state mobile
         if (status === 'open') {
             sidebar.classList.add('translate-x-0');
             sidebar.classList.remove('-translate-x-full');
@@ -491,5 +544,6 @@ window.addEventListener('resize', () => {
     }
 });
 </script>
+
 </body>
 </html>

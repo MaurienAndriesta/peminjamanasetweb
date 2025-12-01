@@ -1,22 +1,49 @@
 <?php
-require_once 'config/database.php';
-$db = new Database();
+require_once '../koneksi.php';
+$db = $koneksi;
 
-// Ambil data booking
-$db->query("SELECT * FROM pemesanan ORDER BY tanggal_mulai ASC");
-$bookings = $db->resultSet();
+// --- AMBIL DATA BOOKING (HANYA YANG DISETUJUI) ---
+$sql_bookings = "SELECT * FROM tbl_pengajuan WHERE status = 'disetujui' ORDER BY tanggal_peminjaman ASC";
+$result_bookings = mysqli_query($db, $sql_bookings);
+
+$bookings = [];
+while ($row = mysqli_fetch_assoc($result_bookings)) {
+    // Warna Hijau (Emerald-500) untuk yang disetujui
+    $color = '#10B981'; 
+    $textColor = '#FFFFFF'; 
+
+    $title = $row['subpilihan'];
+
+    $bookings[] = [
+        'id' => $row['id'],
+        'title' => $title,
+        'start' => $row['tanggal_peminjaman'] . 'T' . $row['jam_mulai'],
+        'end' => $row['tanggal_selesai'] . 'T' . $row['jam_selesai'],
+        'backgroundColor' => $color,
+        'borderColor' => $color,
+        'textColor' => $textColor,
+        'extendedProps' => [
+            'status' => ucfirst($row['status']),
+            'pemohon' => $row['nama_peminjam'],
+            'ruangan' => $row['subpilihan'],
+            'agenda' => $row['agenda'] ?? '-',
+            'waktu' => substr($row['jam_mulai'], 0, 5) . ' - ' . substr($row['jam_selesai'], 0, 5)
+        ]
+    ];
+}
 
 // --- LOGIC STATISTIK ---
-$db->query("SELECT 
-    SUM(CASE WHEN status = 'disetujui' AND tanggal_selesai < CURDATE() THEN 1 ELSE 0 END) AS total_selesai_pinjam,
-    SUM(CASE WHEN status = 'disetujui' AND tanggal_mulai <= CURDATE() AND tanggal_selesai >= CURDATE() THEN 1 ELSE 0 END) AS today_active,
-    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS total_pending
-    FROM pemesanan");
-$stats_summary = $db->single();
+// today_active: Menghitung jumlah ruangan yang tanggal pinjamnya mencakup hari ini
+// upcoming_booked: Menghitung total booking yang belum selesai (hari ini ke depan)
+$sql_stats = "SELECT 
+    SUM(CASE WHEN status = 'disetujui' AND CURDATE() BETWEEN tanggal_peminjaman AND tanggal_selesai THEN 1 ELSE 0 END) AS today_active,
+    SUM(CASE WHEN status = 'disetujui' AND tanggal_selesai >= CURDATE() THEN 1 ELSE 0 END) AS upcoming_booked
+    FROM tbl_pengajuan";
 
-$today_date = date('Y-m-d');
-$success_message = isset($_GET['success_msg']) ? htmlspecialchars($_GET['success_msg']) : null;
+$result_stats = mysqli_query($db, $sql_stats);
+$stats_summary = mysqli_fetch_assoc($result_stats);
 ?>
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -24,260 +51,275 @@ $success_message = isset($_GET['success_msg']) ? htmlspecialchars($_GET['success
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Jadwal Pemakaian Aset</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+  
+  <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
+  
+  <script src="https://unpkg.com/@popperjs/core@2"></script>
+  <script src="https://unpkg.com/tippy.js@6"></script>
+  <link rel="stylesheet" href="https://unpkg.com/tippy.js@6/animations/scale.css"/>
+
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <style>
-    body {
-      font-family: 'Poppins', sans-serif;
-    }
+    body { font-family: 'Poppins', sans-serif; }
     .text-dark-accent { color: #202938; }
     .main { transition: margin-left 0.3s ease; }
 
+    /* === ANIMASI HALUS === */
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in-up {
+        animation: fadeInUp 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+    }
+
+    /* === CUSTOM FULLCALENDAR STYLES === */
     #calendar {
       background: white;
-      border-radius: 1rem;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-      padding: 1rem;
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+      transition: box-shadow 0.3s ease;
+    }
+    #calendar:hover {
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
     }
 
     .fc-toolbar-title {
-      font-weight: 700;
-      font-size: 1.2rem !important;
+        font-size: 1.25rem !important;
+        font-weight: 700;
+        color: #1F2937;
+    }
+    
+    .fc-button {
+        background-color: #3B82F6 !important;
+        border: none !important;
+        font-weight: 500 !important;
+        text-transform: capitalize !important;
+        border-radius: 8px !important;
+        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+        transition: all 0.2s ease !important;
+    }
+    .fc-button:hover { background-color: #2563EB !important; transform: scale(1.05); }
+    .fc-button-active { background-color: #1D4ED8 !important; }
+
+    /* HARI INI (BIRU MUDA) */
+    .fc-day-today {
+        background-color: #EFF6FF !important;
+        transition: background-color 0.3s ease;
     }
 
-    @media (max-width: 640px) {
-      .fc-toolbar {
-        flex-direction: column !important;
-        gap: 0.5rem;
-      }
-      .fc-toolbar-title {
-        font-size: 1rem !important;
-      }
-      .fc-button {
-        font-size: 0.75rem !important;
-        padding: 0.25rem 0.5rem !important;
-      }
+    .fc-event {
+        border-radius: 4px !important;
+        padding: 2px 4px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: transform 0.1s, box-shadow 0.1s;
+        border: none !important; 
+    }
+    .fc-event:hover {
+        transform: scale(1.05);
+        z-index: 50 !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .fc-list-event-dot {
+        border-color: inherit !important;
     }
 
-    .stat-card {
-      @apply flex flex-wrap items-center justify-between gap-2 p-4 sm:p-5 rounded-xl shadow-md transform hover:scale-[1.02] transition-all;
+    @media (min-width: 1024px) {
+        .main { margin-left: 4rem; }
+        .main.lg\:ml-60 { margin-left: 15rem; }
     }
+    @media (max-width: 1023px) {
+        .main { margin-left: 0 !important; }
+        .fc-header-toolbar { flex-direction: column; gap: 10px; }
+    }
+    
+    #toggleBtn { position: relative; z-index: 51 !important; }
+    
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
   </style>
 </head>
 <body class="bg-blue-100 min-h-screen">
 
 <?php include 'sidebar_admin.php'; ?>
-<div id="sidebarOverlay" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden lg:hidden"></div>
+<div id="sidebarOverlay" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden lg:hidden transition-opacity duration-300"></div>
 
-<!-- MAIN CONTENT -->
-<div id="mainContent" class="main flex-1 p-3 sm:p-5 transition-all duration-300 lg:ml-16 min-h-screen">
+<div id="mainContent" class="main flex-1 p-4 sm:p-6 transition-all duration-300 lg:ml-16 min-h-screen animate-fade-in-up">
 
-  <div class="flex justify-between items-center mb-4 sm:mb-6">
-    <button id="toggleBtn" class="bg-amber-500 hover:bg-amber-600 text-gray-900 p-2 rounded-lg transition-colors shadow-md" onclick="toggleSidebar()">
+  <div class="flex justify-between items-center mb-6">
+    <button id="toggleBtn" class="bg-amber-500 hover:bg-amber-600 text-gray-900 p-2 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg hover:scale-105" onclick="toggleSidebar()">
       <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
       </svg>
     </button>
+    <div class="text-sm text-gray-600 hidden sm:block font-semibold">Jadwal Aset</div>
   </div>
 
-  <?php if (!empty($success_message)): ?>
-    <div id="successAlert" class="bg-green-100 border border-green-400 text-green-700 px-3 sm:px-4 py-3 rounded-lg mb-4 shadow-md text-sm" role="alert">
-      <?= $success_message ?>
-    </div>
-  <?php endif; ?>
-
-  <div class="bg-white p-4 sm:p-6 rounded-xl shadow-lg">
-    <div class="border-b pb-4 mb-5">
-      <h1 class="text-xl sm:text-2xl font-bold text-dark-accent">📅 Jadwal Pemakaian Aset</h1>
-      <p class="text-gray-500 text-xs sm:text-sm">Kalender penggunaan ruang, laboratorium, & fasilitas IT PLN</p>
-    </div>
-
- <!-- Stats Cards -->
-<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-6">
-
-  <!-- Card: Sedang Aktif -->
-  <div class="relative bg-gradient-to-br from-blue-50 to-blue-100 p-5 rounded-3xl shadow-[0_8px_20px_rgba(0,0,0,0.08),0_2px_4px_rgba(255,255,255,0.6)_inset] border border-blue-100 transition-all duration-500 hover:shadow-[0_12px_28px_rgba(0,0,0,0.12),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:-translate-y-1">
-    <div class="absolute inset-0 bg-gradient-radial from-white/40 to-transparent rounded-3xl pointer-events-none"></div>
-    <div class="relative flex items-center justify-between">
-      <div class="text-4xl sm:text-5xl">🗓️</div>
-      <div class="text-right">
-        <h3 class="text-sm sm:text-base font-semibold text-blue-700 mb-1">Sedang Aktif Hari Ini</h3>
-        <p class="text-3xl sm:text-4xl font-bold text-blue-900"><?= $stats_summary['today_active'] ?? 0 ?></p>
-      </div>
-    </div>
+  <div class="mb-8">
+      <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+        📅 Jadwal & Ketersediaan
+      </h1>
+      <p class="text-gray-600 text-sm mt-1">Pantau penggunaan aset kampus secara real-time.</p>
   </div>
 
-  <!-- Card: Selesai -->
-  <div class="relative bg-gradient-to-br from-green-50 to-green-100 p-5 rounded-3xl shadow-[0_8px_20px_rgba(0,0,0,0.08),0_2px_4px_rgba(255,255,255,0.6)_inset] border border-green-100 transition-all duration-500 hover:shadow-[0_12px_28px_rgba(0,0,0,0.12),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:-translate-y-1">
-    <div class="absolute inset-0 bg-gradient-radial from-white/40 to-transparent rounded-3xl pointer-events-none"></div>
-    <div class="relative flex items-center justify-between">
-      <div class="text-4xl sm:text-5xl">✅</div>
-      <div class="text-right">
-        <h3 class="text-sm sm:text-base font-semibold text-green-700 mb-1">Selesai Dipinjam</h3>
-        <p class="text-3xl sm:text-4xl font-bold text-green-900"><?= $stats_summary['total_selesai_pinjam'] ?? 0 ?></p>
-      </div>
-    </div>
-  </div>
-
-  <!-- Card: Pending -->
-  <div class="relative bg-gradient-to-br from-amber-50 to-yellow-100 p-5 rounded-3xl shadow-[0_8px_20px_rgba(0,0,0,0.08),0_2px_4px_rgba(255,255,255,0.6)_inset] border border-amber-100 transition-all duration-500 hover:shadow-[0_12px_28px_rgba(0,0,0,0.12),0_2px_6px_rgba(255,255,255,0.7)_inset] hover:-translate-y-1">
-    <div class="absolute inset-0 bg-gradient-radial from-white/40 to-transparent rounded-3xl pointer-events-none"></div>
-    <div class="relative flex items-center justify-between">
-      <div class="text-4xl sm:text-5xl">⏳</div>
-      <div class="text-right">
-        <h3 class="text-sm sm:text-base font-semibold text-amber-700 mb-1">Total Pending</h3>
-        <p class="text-3xl sm:text-4xl font-bold text-amber-900"><?= $stats_summary['total_pending'] ?? 0 ?></p>
-      </div>
-    </div>
-  </div>
-
-
-
-
-
-</div>
-
-
-    <!-- KONTEN UTAMA -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
       
-      <!-- Kalender -->
-      <div class="lg:col-span-2">
-        <div id="calendar"></div>
+      <div class="bg-white p-5 rounded-2xl shadow-sm border-l-4 border-red-500 flex items-center justify-between transition-all duration-300 hover:-translate-y-1 hover:shadow-md cursor-default">
+          <div>
+              <p class="text-xs text-gray-400 font-bold uppercase">Total Booked (Aktif)</p>
+              <p class="text-2xl font-bold text-red-600"><?= $stats_summary['upcoming_booked'] ?? 0 ?></p>
+          </div>
+          <div class="p-3 bg-red-50 rounded-full text-red-500">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+          </div>
       </div>
 
-      <!-- Daftar Booking -->
-      <div class="lg:col-span-1 space-y-4">
-        <!-- Aktif -->
-        <div class="bg-white p-3 sm:p-4 rounded-xl shadow-lg border border-gray-200">
-          <h2 class="text-base sm:text-lg font-bold mb-3 text-dark-accent border-b pb-2 flex items-center gap-2">
-            <span>📅</span>
-            <span>Detail Booking Aktif</span>
-          </h2>
-          <div class="max-h-[300px] overflow-y-auto">
-            <?php 
-            $active_found = false;
-            foreach ($bookings as $row): 
-              $status = strtolower($row['status']);
-              $is_active_or_pending = ($status === 'pending') || ($status === 'disetujui' && strtotime($row['tanggal_selesai']) >= strtotime($today_date));
-              if (!$is_active_or_pending) continue;
-              $active_found = true;
-
-              $is_today_active = (date('Y-m-d', strtotime($row['tanggal_mulai'])) <= $today_date && date('Y-m-d', strtotime($row['tanggal_selesai'])) >= $today_date && $status === 'disetujui');
-              
-              $card_class = 'p-2.5 sm:p-3 rounded-lg mb-2 sm:mb-3 border cursor-pointer transition-all duration-150';
-              $icon = '⏳'; $color = 'text-yellow-700';
-              
-              if ($status === 'disetujui') {
-                $card_class .= ' bg-green-50 border-green-300';
-                $icon = '✅'; $color = 'text-green-800';
-              } elseif ($status === 'pending') {
-                $card_class .= ' bg-yellow-50 border-yellow-300';
-              }
-              if ($is_today_active) {
-                $card_class = 'p-2.5 sm:p-3 rounded-lg mb-2 sm:mb-3 border-2 border-red-500 bg-red-100 shadow-lg hover:bg-red-200';
-                $color = 'text-red-800'; $icon = '🔥';
-              }
-            ?>
-              <a href="detailpermintaan_admin.php?id=<?= $row['id'] ?>" class="block">
-                <div class="<?= $card_class ?>">
-                  <strong class="text-xs sm:text-sm font-bold <?= $color ?> flex items-center gap-1.5 line-clamp-1">
-                    <span><?= $icon ?></span>
-                    <span class="truncate"><?= htmlspecialchars($row['nama_ruang']) ?></span>
-                  </strong>
-                  <p class="text-xs text-gray-700 mt-1 truncate">👤 <?= htmlspecialchars($row['pemohon']) ?></p>
-                  <small class="block mt-1 text-xs text-gray-500">
-                    📅 <?= date('d M', strtotime($row['tanggal_mulai'])) ?> - <?= date('d M Y', strtotime($row['tanggal_selesai'])) ?>
-                  </small>
-                </div>
-              </a>
-            <?php endforeach; 
-            if (!$active_found): ?>
-              <div class="text-center py-6 sm:py-8 text-gray-500">
-                <div class="text-3xl sm:text-4xl mb-2">📭</div>
-                Tidak ada booking aktif
-              </div>
-            <?php endif; ?>
+      <div class="bg-white p-5 rounded-2xl shadow-sm border-l-4 border-blue-500 flex items-center justify-between transition-all duration-300 hover:-translate-y-1 hover:shadow-md cursor-default">
+          <div>
+              <p class="text-xs text-gray-400 font-bold uppercase">Ruang Terpakai Hari Ini</p>
+              <p class="text-2xl font-bold text-blue-600"><?= $stats_summary['today_active'] ?? 0 ?></p>
           </div>
-        </div>
-
-        <!-- Riwayat -->
-        <div class="bg-white p-3 sm:p-4 rounded-xl shadow-lg border border-gray-200">
-          <h2 class="text-base sm:text-lg font-bold mb-3 text-dark-accent border-b pb-2 flex items-center gap-2">
-            <span>📜</span>
-            <span>Riwayat Peminjaman</span>
-          </h2>
-          <div class="max-h-[300px] overflow-y-auto">
-            <?php 
-            $history_found = false;
-            foreach (array_reverse($bookings) as $row): 
-              $status = strtolower($row['status']);
-              $is_finished = ($status === 'disetujui' && strtotime($row['tanggal_selesai']) < strtotime($today_date));
-              if (!$is_finished) continue;
-              $history_found = true;
-            ?>
-              <a href="detailpermintaan_admin.php?id=<?= $row['id'] ?>" class="block">
-                <div class="p-2.5 sm:p-3 rounded-lg mb-2 sm:mb-3 border bg-gray-50 border-gray-300 hover:shadow-md transition-all duration-150">
-                  <strong class="text-xs sm:text-sm font-bold text-gray-800 flex items-center gap-1.5">
-                    <span>✔️</span>
-                    <span class="truncate"><?= htmlspecialchars($row['nama_ruang']) ?></span>
-                  </strong>
-                  <p class="text-xs text-gray-700 mt-1 truncate">👤 <?= htmlspecialchars($row['pemohon']) ?></p>
-                  <small class="block mt-1 text-xs text-gray-500">Selesai: <?= date('d M Y', strtotime($row['tanggal_selesai'])) ?></small>
-                </div>
-              </a>
-            <?php endforeach; 
-            if (!$history_found): ?>
-              <div class="text-center py-6 sm:py-8 text-gray-500">
-                <div class="text-3xl sm:text-4xl mb-2">📋</div>
-                Tidak ada riwayat
-              </div>
-            <?php endif; ?>
+          <div class="p-3 bg-blue-50 rounded-full text-blue-500">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
           </div>
-        </div>
       </div>
-    </div>
+
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      
+      <div class="lg:col-span-3">
+          <div class="bg-white p-1 rounded-2xl shadow-md transition-shadow hover:shadow-lg">
+              <div class="flex gap-4 p-4 border-b border-gray-100 text-xs font-medium text-gray-600">
+                  <div class="flex items-center gap-2">
+                      <span class="w-3 h-3 rounded-full bg-blue-100 border border-blue-300 shadow-sm"></span> Hari Ini
+                  </div>
+                  <div class="flex items-center gap-2">
+                      <span class="w-3 h-3 rounded-full bg-emerald-500 shadow-sm"></span> Terbooking
+                  </div>
+              </div>
+              
+              <div id="calendar"></div>
+          </div>
+      </div>
+
+      <div class="lg:col-span-1">
+          <div class="bg-white rounded-2xl shadow-md p-5 h-full transition-shadow hover:shadow-lg">
+              <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <span>📋</span> Agenda yang akan datang
+              </h3>
+              
+              <div class="space-y-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar">
+                  <?php 
+                  // List tetap menampilkan Pending agar admin tau ada tugas
+                  $sql_list = "SELECT * FROM tbl_pengajuan WHERE status IN ('disetujui', 'pending') AND tanggal_selesai >= CURDATE() ORDER BY tanggal_peminjaman ASC LIMIT 10";
+                  $res_list = mysqli_query($db, $sql_list);
+                  
+                  if (mysqli_num_rows($res_list) > 0):
+                      while ($row = mysqli_fetch_assoc($res_list)): 
+                          $st = strtolower($row['status']);
+                          
+                          $border_color = ($st == 'disetujui') ? 'border-emerald-500' : 'border-yellow-500';
+                          $bg_badge = ($st == 'disetujui') ? 'bg-emerald-100 text-emerald-700' : 'bg-yellow-100 text-yellow-700';
+                          $status_text = ($st == 'disetujui') ? 'Booked' : 'Pending';
+                  ?>
+                    <a href="detailpermintaan_admin.php?id=<?= $row['id'] ?>" class="block group">
+                        <div class="p-3 rounded-xl border-l-4 <?= $border_color ?> bg-gray-50 hover:bg-gray-100 transition-all duration-200 cursor-pointer hover:-translate-y-0.5 hover:shadow-sm">
+                            <div class="flex justify-between items-start mb-1">
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded-md <?= $bg_badge ?>"><?= $status_text ?></span>
+                                <span class="text-xs text-gray-400"><?= date('d M', strtotime($row['tanggal_peminjaman'])) ?></span>
+                            </div>
+                            <h4 class="text-sm font-bold text-gray-800 line-clamp-1 group-hover:text-blue-600 transition-colors"><?= htmlspecialchars($row['subpilihan']) ?></h4>
+                            <p class="text-xs text-gray-500 mt-1 truncate">👤 <?= htmlspecialchars($row['nama_peminjam']) ?></p>
+                            <p class="text-xs text-gray-400 mt-1">⏰ <?= substr($row['jam_mulai'],0,5) ?> - <?= substr($row['jam_selesai'],0,5) ?></p>
+                        </div>
+                    </a>
+                  <?php endwhile; else: ?>
+                      <div class="text-center py-10 text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+                          <p class="text-sm">Tidak ada agenda dalam waktu dekat.</p>
+                      </div>
+                  <?php endif; ?>
+              </div>
+          </div>
+      </div>
+
   </div>
 </div>
 
 <script>
+document.addEventListener('DOMContentLoaded', function() {
+    var calendarEl = document.getElementById('calendar');
+    var events = <?= json_encode($bookings) ?>;
+
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'id',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,listWeek'
+        },
+        height: 'auto',
+        events: events,
+        eventClick: function(info) {
+            var id = info.event.id;
+            if (id) {
+                window.location.href = 'detailpermintaan_admin.php?id=' + id;
+            }
+        },
+        // TOOLTIP TIPPY.JS
+        eventDidMount: function(info) {
+            const props = info.event.extendedProps;
+            const content = `
+                <div class="text-left p-1">
+                    <div class="font-bold text-sm border-b border-gray-400 pb-1 mb-1 text-white">${props.ruangan}</div>
+                    <div class="text-xs text-gray-200">👤 ${props.pemohon}</div>
+                    <div class="text-xs text-gray-200 mt-1">📝 ${props.agenda}</div>
+                    <div class="text-xs text-gray-300 mt-1">⏰ ${props.waktu}</div>
+                </div>
+            `;
+            
+            tippy(info.el, {
+                content: content,
+                allowHTML: true,
+                theme: 'light', 
+                placement: 'top',
+                animation: 'scale',
+                maxWidth: 220,
+                backgroundColor: '#333'
+            });
+        }
+    });
+    calendar.render();
+});
+
+// --- SIDEBAR LOGIC ---
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     const main = document.getElementById('mainContent');
-    const overlay = document.getElementById('sidebarOverlay');
-    const toggleBtn = document.getElementById('toggleBtn'); // Ambil toggle button
     const is_desktop = window.innerWidth >= 1024;
 
     if (is_desktop) {
+        // Desktop: Toggle width
         sidebar.classList.toggle('lg:w-60');
         sidebar.classList.toggle('lg:w-16');
         main.classList.toggle('lg:ml-60');
         main.classList.toggle('lg:ml-16');
-        
-        // KODE REVISI: Geser tombol toggle di desktop
-        const is_expanded = sidebar.classList.contains('lg:w-60');
-        if (is_expanded) {
-             // Jika sidebar terbuka (15rem), pindahkan tombol ke kanan
-            toggleBtn.style.left = '16rem'; 
-        } else {
-             // Jika sidebar tertutup (4rem), pindahkan tombol di samping sidebar kecil
-            toggleBtn.style.left = '5rem'; 
-        }
-
     } else {
+        // Mobile: Toggle visibility
         sidebar.classList.toggle('translate-x-0');
         sidebar.classList.toggle('-translate-x-full');
-        // Di mobile, tombol toggle tetap di kiri (1.25rem)
-        if (overlay) {
-            overlay.classList.toggle('hidden');
-        }
     }
 
     const is_expanded = sidebar.classList.contains('lg:w-60') || sidebar.classList.contains('translate-x-0');
     
-    // Asumsi fungsi updateSidebarVisibility ada di sidebar_admin.php
     if (typeof updateSidebarVisibility === 'function') {
         updateSidebarVisibility(is_expanded);
     }
@@ -285,75 +327,23 @@ function toggleSidebar() {
     localStorage.setItem('sidebarStatus', is_expanded ? 'open' : 'collapsed');
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-  const sidebar = document.getElementById("sidebar");
-  const main = document.getElementById("mainContent");
-  const overlay = document.getElementById("sidebarOverlay");
-  const status = localStorage.getItem('sidebarStatus');
-  const is_desktop = window.innerWidth >= 1024;
-  const successAlert = document.getElementById('successAlert');
-
-  if (status === 'open') {
-    if (is_desktop) {
-      sidebar.classList.add('lg:w-60');
-      sidebar.classList.remove('lg:w-16');
-      main.classList.add('lg:ml-60');
-      main.classList.remove('lg:ml-16');
+document.addEventListener('DOMContentLoaded', () => {
+    const sidebar = document.getElementById('sidebar');
+    const main = document.getElementById('mainContent');
+    const status = localStorage.getItem('sidebarStatus');
+    
+    if (status === 'open') {
+        sidebar.classList.add('w-60');
+        sidebar.classList.remove('w-16');
+        main.classList.add('ml-60');
+        main.classList.remove('ml-16');
     } else {
-      sidebar.classList.add('translate-x-0');
-      sidebar.classList.remove('-translate-x-full');
-      overlay.classList.remove('hidden');
+        sidebar.classList.remove('w-60');
+        sidebar.classList.add('w-16');
+        main.classList.remove('ml-60');
+        main.classList.add('ml-16');
     }
-  }
-  
-
-  if (overlay) overlay.addEventListener('click', toggleSidebar);
-
-  if (successAlert) {
-    setTimeout(() => {
-      successAlert.style.opacity = '0';
-      setTimeout(() => successAlert.style.display = 'none', 500);
-    }, 4000);
-  }
-
-  // FullCalendar
-  const calendarEl = document.getElementById('calendar');
-  const bookings = <?= json_encode($bookings) ?>;
-  const events = bookings.map(row => {
-    const end = new Date(row.tanggal_selesai);
-    end.setDate(end.getDate() + 1);
-    const status = row.status.toLowerCase();
-    if (status !== 'pending' && status !== 'disetujui') return null;
-    return {
-      title: row.nama_ruang + " (" + row.pemohon + ")",
-      start: row.tanggal_mulai,
-      end: end.toISOString().split('T')[0],
-      color: status === 'disetujui' ? '#10B981' : '#F59E0B',
-      extendedProps: { id: row.id }
-    };
-  }).filter(Boolean);
-
-  const calendar = new FullCalendar.Calendar(calendarEl, {
-    initialView: window.innerWidth < 768 ? 'timeGridDay' : 'dayGridMonth',
-    height: window.innerWidth < 640 ? 400 : 600,
-    locale: 'id',
-    headerToolbar: {
-      left: 'prev,next today',
-      center: 'title',
-      right: 'dayGridMonth,timeGridWeek,timeGridDay'
-    },
-    events,
-    eventClick: info => {
-      const id = info.event.extendedProps.id;
-      if (id) window.location.href = 'detailpermintaan_admin.php?id=' + id;
-    },
-    windowResize: () => {
-      calendar.setOption('height', window.innerWidth < 640 ? 400 : 600);
-    }
-  });
-  calendar.render();
 });
 </script>
-
 </body>
 </html>

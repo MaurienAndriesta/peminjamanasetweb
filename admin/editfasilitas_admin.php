@@ -13,7 +13,7 @@ $fasilitas_data = [];
 $error_message = null;
 
 // --- 1. Ambil data lama dari database ---
-$sql = "SELECT * FROM tbl_fasilitas WHERE id = $fasilitas_id AND status = 'tersedia'";
+$sql = "SELECT * FROM tbl_fasilitas WHERE id = $fasilitas_id";
 $result = mysqli_query($db, $sql);
 
 if ($result && mysqli_num_rows($result) > 0) {
@@ -27,9 +27,10 @@ if ($result && mysqli_num_rows($result) > 0) {
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $nama_fasilitas = trim($_POST['nama_fasilitas'] ?? '');
     $kapasitas = trim($_POST['kapasitas'] ?? '');
+    $status = $_POST['status'] ?? 'tersedia';
     $tipe_tarif = $_POST['tipe_tarif'] ?? 'berbayar';
-    $tarif_internal = (float)($_POST['tarif_internal'] ?? 0);
-    $tarif_eksternal = (float)($_POST['tarif_eksternal'] ?? 0);
+    $tarif_internal = (float)str_replace(['.', ','], ['', '.'], $_POST['tarif_internal'] ?? '0');
+    $tarif_eksternal = (float)str_replace(['.', ','], ['', '.'], $_POST['tarif_eksternal'] ?? '0');
     $keterangan = trim($_POST['keterangan'] ?? '');
 
     $errors = [];
@@ -79,11 +80,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // Jika tidak ada error → update database
     if (empty($errors)) {
         $gambar_sql = !empty($gambar_name) ? ", gambar = '$gambar_name'" : "";
-            $update_sql = "
+        $update_sql = "
             UPDATE tbl_fasilitas 
             SET 
                 nama = '$nama_fasilitas',
                 kapasitas = '$kapasitas',
+                status = '$status',
                 tarif_internal = '$tarif_internal',
                 tarif_eksternal = '$tarif_eksternal',
                 keterangan = '$keterangan',
@@ -91,7 +93,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $gambar_sql
             WHERE id = $fasilitas_id
         ";
-
 
         if (mysqli_query($db, $update_sql)) {
             header("Location: datafasilitas_admin.php?status=success_edit");
@@ -104,6 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $fasilitas_data = array_merge($fasilitas_data, [
             'nama' => $nama_fasilitas,
             'kapasitas' => $kapasitas,
+            'status' => $status,
             'tarif_internal' => $tarif_internal,
             'tarif_eksternal' => $tarif_eksternal,
             'keterangan' => $keterangan,
@@ -153,11 +155,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             transition: opacity .3s;
             z-index: 5;
         }
-        /* Style untuk tarif inputs */
-        .tarif-inputs > div {
-            display: flex;
-            flex-direction: column; 
+        /* Style untuk tarif row */
+        .tarif-row {
+            display: grid;
+            grid-template-columns: 1fr max-content; 
             gap: 0.5rem;
+            align-items: center;
+        }
+        .input-group {
+            position: relative;
+        }
+        .input-group .form-input { 
+            padding-left: 3rem; 
+        }
+        .input-prefix { 
+            position: absolute; 
+            left: 0.5rem;
+            top: 50%; 
+            transform: translateY(-50%); 
+            color: #4b5563;
+            font-weight: 600;
+            pointer-events: none;
         }
     </style>
 </head>
@@ -182,12 +200,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <a href="datafasilitas_admin.php" class="bg-gray-700 hover:bg-gray-800 text-white p-3 rounded-lg mr-4 transition-colors">←</a>
             
             <div>
-                <h1 class="text-2xl font-bold text-amber-700">Edit Data Fasilitas</h1>
+                <h1 class="text-2xl font-bold text-amber-700">Edit Data Fasilitas: <?= htmlspecialchars($fasilitas_data['nama'] ?? 'N/A') ?></h1>
                 <p class="text-gray-500 text-sm">Perbarui informasi fasilitas</p>
             </div>
         </div>
 
-       <form method="POST" enctype="multipart/form-data" id="editForm">
+        <form method="POST" enctype="multipart/form-data" id="editForm">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
                 
                 <div class="space-y-6">
@@ -212,29 +230,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     </div>
 
                     <div class="form-group">
-                        <label for="nama_fasilitas" class="block font-semibold mb-2">Fasilitas : <span class="text-red-500">*</span></label>
-                        <input type="text" id="nama_fasilitas" name="nama_fasilitas" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
-                               placeholder="Isi Fasilitas" required 
-                               value="<?= htmlspecialchars($fasilitas_data['nama'] ?? '') ?>">
-                    </div>
-
-                    <div class="form-group">
-                    <label for="kapasitas" class="block font-semibold mb-2">Kapasitas : <span class="text-red-500">*</span></label>
-                    <select id="kapasitas" name="kapasitas" required
-                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500">
-                        <option value="">-- Pilih Kapasitas --</option>
-                        <option value="Dalam Kota" <?= ($fasilitas_data['kapasitas'] ?? '') == 'Dalam Kota' ? 'selected' : '' ?>>Dalam Kota</option>
-                        <option value="Luar Kota" <?= ($fasilitas_data['kapasitas'] ?? '') == 'Luar Kota' ? 'selected' : '' ?>>Luar Kota</option>
-                        <option value="Standar" <?= ($fasilitas_data['kapasitas'] ?? '') == 'Standar' ? 'selected' : '' ?>>Standar</option>
-                    </select>
-                    </div>
-
-                </div>
-
-                <div class="space-y-6">
-                    
-
-                    <div class="form-group">
                         <label class="block font-semibold mb-2">Tipe Tarif : <span class="text-red-500">*</span></label>
                         <div class="flex items-center gap-6">
                             <label class="flex items-center gap-2 cursor-pointer">
@@ -247,38 +242,83 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                        <?= (isset($fasilitas_data['tarif_internal']) && $fasilitas_data['tarif_internal'] > 0) ? 'checked' : '' ?>>
                                 Berbayar
                             </label>
-                             <div class="flex items-center gap-2 text-sm text-gray-600 border-l pl-4">
-                                <label class="flex items-center gap-1 cursor-pointer">
-                                    <input type="radio" id="hari" name="periode" value="hari" class="form-radio text-amber-500 h-4 w-4" checked> Hari
-                                </label>
-                                <span>/</span>
-                                <label class="flex items-center gap-1 cursor-pointer">
-                                    <input type="radio" id="jam" name="periode" value="jam" class="form-radio text-amber-500 h-4 w-4"> Jam
-                                </label>
-                            </div>
                         </div>
                     </div>
 
-                    <div class="form-group" id="tarifSection">
-                        <label class="block font-semibold mb-2">Tarif Sewa Internal/Eksternal IT PLN : <span class="text-red-500">*</span></label>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <input type="number" name="tarif_internal" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
-                                       placeholder="Isi Tarif Internal" 
-                                       value="<?= isset($fasilitas_data['tarif_internal']) && $fasilitas_data['tarif_internal'] > 0 ? $fasilitas_data['tarif_internal'] : '' ?>">
-                                <div class="flex items-center justify-start mt-2 text-sm text-gray-600">
-                                    <span class="font-medium">Internal</span>
+                    <div id="tarifSection">
+                        <div class="form-group">
+                            <label class="block font-semibold mb-2">Tarif Sewa Internal : <span class="text-red-500">*</span></label>
+                            <div class="tarif-row">
+                                <!-- INPUT ASLI (hidden) -->
+                                <input type="hidden" 
+                                       id="tarif_internal" 
+                                       name="tarif_internal"
+                                       value="<?= $fasilitas_data['tarif_internal'] ?? '' ?>">
+
+                                <!-- INPUT UNTUK USER (formatted) -->
+                                <div class="input-group">
+                                    <span class="input-prefix">Rp</span>
+                                    <input type="text" 
+                                           id="tarif_internal_display"
+                                           class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500"
+                                           value="<?= number_format($fasilitas_data['tarif_internal'] ?? 0, 0, ',', '.') ?>">
                                 </div>
-                            </div>
-                            <div>
-                                <input type="number" name="tarif_eksternal" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
-                                       placeholder="Isi Tarif Eksternal" 
-                                       value="<?= isset($fasilitas_data['tarif_eksternal']) && $fasilitas_data['tarif_eksternal'] > 0 ? $fasilitas_data['tarif_eksternal'] : '' ?>">
-                                <div class="flex items-center justify-start mt-2 text-sm text-gray-600">
-                                    <span class="font-medium">Eksternal</span>
+
+                                <div class="inline-flex items-center px-4 py-3 border border-gray-300 rounded-lg bg-white">
+                                    <span class="text-sm font-medium">perhari</span>
                                 </div>
                             </div>
                         </div>
+
+                        <div class="form-group">
+                            <label class="block font-semibold mb-2">Tarif Sewa Eksternal : <span class="text-red-500">*</span></label>
+                            <div class="tarif-row">
+                                <input type="hidden" 
+                                       id="tarif_eksternal" 
+                                       name="tarif_eksternal"
+                                       value="<?= $fasilitas_data['tarif_eksternal'] ?? '' ?>">
+
+                                <div class="input-group">
+                                    <span class="input-prefix">Rp</span>
+                                    <input type="text" 
+                                           id="tarif_eksternal_display"
+                                           class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500"
+                                           value="<?= number_format($fasilitas_data['tarif_eksternal'] ?? 0, 0, ',', '.') ?>">
+                                </div>
+
+                                <div class="inline-flex items-center px-4 py-3 border border-gray-300 rounded-lg bg-white">
+                                    <span class="text-sm font-medium">perhari</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-6">
+                    <div class="form-group">
+                        <label for="nama_fasilitas" class="block font-semibold mb-2">Nama Fasilitas : <span class="text-red-500">*</span></label>
+                        <input type="text" id="nama_fasilitas" name="nama_fasilitas" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" 
+                               placeholder="Isi Nama Fasilitas" required 
+                               value="<?= htmlspecialchars($fasilitas_data['nama'] ?? '') ?>">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="kapasitas" class="block font-semibold mb-2">Kapasitas : <span class="text-red-500">*</span></label>
+                        <select id="kapasitas" name="kapasitas" required
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500">
+                            <option value="">-- Pilih Kapasitas --</option>
+                            <option value="Dalam Kota" <?= ($fasilitas_data['kapasitas'] ?? '') == 'Dalam Kota' ? 'selected' : '' ?>>Dalam Kota</option>
+                            <option value="Luar Kota" <?= ($fasilitas_data['kapasitas'] ?? '') == 'Luar Kota' ? 'selected' : '' ?>>Luar Kota</option>
+                            <option value="Standar" <?= ($fasilitas_data['kapasitas'] ?? '') == 'Standar' ? 'selected' : '' ?>>Standar</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="status" class="block font-semibold mb-2">Status : <span class="text-red-500">*</span></label>
+                        <select id="status" name="status" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500" required>
+                            <option value="tersedia" <?= ($fasilitas_data['status'] ?? '') === 'tersedia' ? 'selected' : '' ?>>Tersedia</option>
+                            <option value="tidak_tersedia" <?= ($fasilitas_data['status'] ?? '') === 'tidak_tersedia' ? 'selected' : '' ?>>Tidak Tersedia</option>
+                        </select>
                     </div>
 
                     <div class="form-group">
@@ -290,11 +330,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             </div>
 
             <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-200">
-                <a href="dataruangmultiguna_admin.php" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold px-6 py-3 rounded-lg shadow transition-colors"
-                onclick="confirmCancel(event);">
+                <a href="datafasilitas_admin.php" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold px-6 py-3 rounded-lg shadow transition-colors"
+                   onclick="confirmCancel(event);">
                     Batal
                 </a>
-
                 <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-semibold px-6 py-3 rounded-lg shadow transition-colors">
                     Simpan Perubahan
                 </button>
@@ -392,67 +431,99 @@ function confirmCancel(event) {
     });
 }
 
+// === Format Rupiah untuk Input Display ===
+function formatRupiah(angka) {
+    const number = parseInt(angka.replace(/[^0-9]/g, ''));
+    if (isNaN(number)) return '';
+    return number.toLocaleString('id-ID');
+}
+
+function setupTarifInput(displayId, hiddenId) {
+    const display = document.getElementById(displayId);
+    const hidden = document.getElementById(hiddenId);
+    
+    display.addEventListener('input', function(e) {
+        const formatted = formatRupiah(e.target.value);
+        e.target.value = formatted;
+        const raw = formatted.replace(/\./g, '');
+        hidden.value = raw;
+    });
+}
+
+// === Toggle Tarif Section ===
+function toggleTarifSection() {
+    const isBerbayar = document.getElementById('berbayar').checked;
+    const tarifSection = document.getElementById('tarifSection');
+
+    if (isBerbayar) {
+        tarifSection.style.display = 'block';
+        tarifSection.style.opacity = '1';
+    } else {
+        tarifSection.style.display = 'none';
+        tarifSection.style.opacity = '0.5';
+        // Reset nilai saat gratis
+        document.getElementById('tarif_internal').value = '0';
+        document.getElementById('tarif_eksternal').value = '0';
+        document.getElementById('tarif_internal_display').value = '';
+        document.getElementById('tarif_eksternal_display').value = '';
+    }
+}
+
 // === Validasi Form ===
 document.getElementById('editForm').addEventListener('submit', function(e) {
     const isBerbayar = document.getElementById('berbayar').checked;
     let isValid = true;
 
-    this.querySelectorAll('input, textarea').forEach(input => input.style.borderColor = '');
+    this.querySelectorAll('input, select, textarea').forEach(input => input.style.borderColor = '');
 
-    if (isBerbayar) {
-        const tarifInternal = document.querySelector('input[name="tarif_internal"]');
-        const tarifEksternal = document.querySelector('input[name="tarif_eksternal"]');
-        
-        if (tarifInternal && (!tarifInternal.value || parseFloat(tarifInternal.value) <= 0)) {
-            isValid = false;
-            tarifInternal.style.borderColor = '#ef4444';
-        }
-        if (tarifEksternal && (!tarifEksternal.value || parseFloat(tarifEksternal.value) <= 0)) {
-            isValid = false;
-            tarifEksternal.style.borderColor = '#ef4444';
-        }
-    }
+    // Field yang harus diisi
+    const requiredFields = ['nama_fasilitas', 'kapasitas', 'status', 'keterangan'];
 
-    this.querySelectorAll('[required]').forEach(input => {
-        if (!input.value.trim()) {
+    requiredFields.forEach(field => {
+        const input = document.getElementById(field);
+        if (input && !input.value.trim()) {
             isValid = false;
             input.style.borderColor = '#ef4444';
         }
     });
 
+    // Cek tarif jika berbayar
+    if (isBerbayar) {
+        const tarifInternal = document.getElementById('tarif_internal');
+        const tarifEksternal = document.getElementById('tarif_eksternal');
+        const tarifInternalDisplay = document.getElementById('tarif_internal_display');
+        const tarifEksternalDisplay = document.getElementById('tarif_eksternal_display');
+
+        if (tarifInternal && parseFloat(tarifInternal.value) <= 0) {
+            isValid = false;
+            tarifInternalDisplay.style.borderColor = '#ef4444'; 
+        }
+        if (tarifEksternal && parseFloat(tarifEksternal.value) <= 0) {
+            isValid = false;
+            tarifEksternalDisplay.style.borderColor = '#ef4444'; 
+        }
+    }
+    
     if (!isValid) {
         e.preventDefault();
         Swal.fire({
             icon: 'warning',
             title: 'Form Belum Lengkap',
-            text: 'Mohon lengkapi semua field yang diperlukan, terutama tarif jika "Berbayar" dipilih.',
+            text: 'Mohon lengkapi semua field yang diperlukan dan pastikan tarif lebih dari 0 jika berbayar.',
             confirmButtonColor: '#f59e0b'
         });
     }
 });
 
-// === Toggle Tarif ===
-function toggleTarifSection() {
-    const isBerbayar = document.getElementById('berbayar').checked;
-    const tarifSection = document.getElementById('tarifSection');
-    const tarifInputs = tarifSection.querySelectorAll('input[type="number"]');
-    
-    if (isBerbayar) {
-        tarifSection.style.display = 'block';
-        tarifSection.style.opacity = '1';
-        tarifInputs.forEach(input => input.disabled = false);
-    } else {
-        tarifSection.style.display = 'none';
-        tarifSection.style.opacity = '0.5';
-        tarifInputs.forEach(input => input.disabled = true);
-    }
-}
-
+// === Inisialisasi ===
 document.getElementById('gratis').addEventListener('change', toggleTarifSection);
 document.getElementById('berbayar').addEventListener('change', toggleTarifSection);
 
-// === Inisialisasi ===
 document.addEventListener('DOMContentLoaded', function() {
+    // Setup format rupiah untuk kedua input tarif
+    setupTarifInput('tarif_internal_display', 'tarif_internal');
+    setupTarifInput('tarif_eksternal_display', 'tarif_eksternal');
+    
     toggleTarifSection();
 
     const img = document.getElementById('previewImg');

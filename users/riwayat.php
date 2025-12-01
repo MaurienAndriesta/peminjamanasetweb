@@ -1,4 +1,15 @@
 <?php
+session_start();
+require_once '../koneksi.php';
+$db = $koneksi;
+
+// ================= CEK LOGIN =================
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../login.php");
+    exit;
+}
+$user_id = $_SESSION['user_id'];
+
 // ================= DATA MENU =================
 $menu_items = [
     ['title' => 'Beranda', 'url' => 'dashboarduser.php'],
@@ -13,10 +24,10 @@ $menu_items = [
                 'title' => 'Laboratorium',
                 'type'  => 'dropdown',
                 'submenu' => [
-                   ['title' => 'Fakultas Teknologi dan Bisnis Energi (FTBE)', 'url' => 'labftbe.php'],
-                   ['title' => 'Fakultas Telematika Energi (FTEN)', 'url' => 'labften.php'],
-                   ['title' => 'Fakultas Teknologi Infrastruktur dan Kewilayahan (FTIK)', 'url' => 'labftik.php'],
-                   ['title' => 'Fakultas Ketenagalistrikan dan Energi Terbarukan (FKET)', 'url' => 'labfket.php'],
+                    ['title' => 'Fakultas Teknologi dan Bisnis Energi (FTBE)', 'url' => 'labftbe.php'],
+                    ['title' => 'Fakultas Telematika Energi (FTEN)', 'url' => 'labften.php'],
+                    ['title' => 'Fakultas Teknologi Infrastruktur dan Kewilayahan (FTIK)', 'url' => 'labftik.php'],
+                    ['title' => 'Fakultas Ketenagalistrikan dan Energi Terbarukan (FKET)', 'url' => 'labfket.php'],
                 ]
             ]
         ]
@@ -26,30 +37,32 @@ $menu_items = [
     ['title' => 'Riwayat Peminjaman', 'url'  => 'riwayat.php'],
 ];
 
-// ================= DATA PEMINJAMAN =================
-$peminjaman = [
-    [
-        "nama" => "Laboratorium Intelligent Computing",
-        "tanggal" => "22 September 2025",
-        "waktu" => "08:00 - 11:30",
-        "agenda" => "Praktikum Basis Data",
-        "status" => "Selesai"
-    ],
-    [
-        "nama" => "Ruang Pembangkit",
-        "tanggal" => "28 September 2025",
-        "waktu" => "08:00 - 11:30",
-        "agenda" => "Workshop Nasional",
-        "status" => "Ditolak"
-    ],
-    [
-        "nama" => "Ruang Auditorium",
-        "tanggal" => "02 Oktober 2025",
-        "waktu" => "13:00 - 16:30",
-        "agenda" => "Seminar AI",
-        "status" => "Selesai"
-    ]
-];
+// ================= AMBIL DATA RIWAYAT DARI DATABASE =================
+$peminjaman = [];
+// Kita ambil data yang statusnya SUDAH SELESAI atau DITOLAK (Bukan Pending/Menunggu)
+$sql = "SELECT * FROM tbl_pengajuan WHERE user_id = ? AND (status = 'Disetujui' OR status = 'Ditolak' OR status = 'Selesai') ORDER BY created_at DESC";
+
+$stmt = $db->prepare($sql);
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$result = $stmt->get_result();
+
+while ($row = $result->fetch_assoc()) {
+    // Format waktu
+    $jam_mulai = date('H:i', strtotime($row['jam_mulai']));
+    $jam_selesai = date('H:i', strtotime($row['jam_selesai']));
+    
+    $peminjaman[] = [
+        "nama" => $row['subpilihan'], // Nama Ruang/Lab
+        "tanggal" => date('d F Y', strtotime($row['tanggal_peminjaman'])),
+        "waktu" => "$jam_mulai - $jam_selesai",
+        "agenda" => $row['agenda'],
+        // Mapping status database ke tampilan (bisa disesuaikan)
+        "status" => ucfirst($row['status']) 
+    ];
+}
+$stmt->close();
+
 
 // ================= FUNGSI RENDER MENU =================
 function renderMenu($items, $prefix = 'root') {
@@ -106,11 +119,6 @@ function renderMenu($items, $prefix = 'root') {
       to { opacity: 1; transform: translateX(0); }
     }
 
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.05); }
-    }
-
     .fade-in {
       animation: fadeIn 0.6s ease forwards;
     }
@@ -148,14 +156,6 @@ function renderMenu($items, $prefix = 'root') {
       transform: translateY(0);
     }
 
-    .stat-card {
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .stat-card:hover {
-      transform: translateY(-8px) scale(1.03);
-    }
-
     .glass-effect {
       background: rgba(255, 255, 255, 0.95);
       backdrop-filter: blur(10px);
@@ -177,12 +177,11 @@ function renderMenu($items, $prefix = 'root') {
   </style>
 </head>
 
-<body class="min-h-screen">
+<!-- PERUBAHAN 1: Menambahkan 'flex flex-col' pada body -->
+<body class="min-h-screen flex flex-col">
 
-<!-- Overlay -->
 <div id="overlay" class="hidden fixed inset-0 bg-black/50 z-40 transition-opacity duration-300" onclick="closeSidebar()"></div>
 
-<!-- Sidebar -->
 <div id="sidebar" class="fixed top-0 left-0 w-72 h-full bg-gray-800 text-white transform -translate-x-full transition-transform duration-300 z-50 shadow-2xl">
   <div class="bg-gray-900 px-6 py-5 font-semibold text-center border-b border-gray-700 text-lg uppercase tracking-wide">
     Menu Utama
@@ -205,14 +204,12 @@ function renderMenu($items, $prefix = 'root') {
   </div>
 
   <div class="flex items-center justify-between px-6 py-4 relative z-10">
-    <!-- Tombol Menu -->
     <button id="menuBtn" class="bg-white/10 hover:bg-white/20 text-white p-2.5 rounded-lg transition duration-200 shadow-md backdrop-blur-sm">
       <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
       </svg>
     </button>
 
-    <!-- Judul Tengah -->
     <div class="flex flex-col items-center text-center mx-auto">
       <div class="flex items-center gap-3">
         <div class="bg-white/10 p-2.5 rounded-lg backdrop-blur-sm">
@@ -230,16 +227,13 @@ function renderMenu($items, $prefix = 'root') {
       </p>
     </div>
 
-    <!-- Spacer biar teks tetap center -->
     <div class="w-10"></div>
   </div>
 </header>
 
-
-
-<main class="container mx-auto px-6 py-10">
+<!-- PERUBAHAN 2: Menambahkan 'flex-grow' pada main -->
+<main class="container mx-auto px-6 py-10 flex-grow">
   <section class="glass-effect shadow-2xl rounded-3xl p-8 mb-8">
-    <!-- Title -->
     <div class="text-center mb-10 fade-in">
       <div class="inline-flex items-center gap-3 bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-3 rounded-2xl shadow-md">
         <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -249,59 +243,7 @@ function renderMenu($items, $prefix = 'root') {
       </div>
     </div>
 
-    <!-- Statistics Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-      <div class="stat-card bg-gradient-to-br from-purple-400 to-purple-500 p-6 rounded-2xl shadow-lg slide-in" style="animation-delay: 0s;">
-        <div class="flex items-center justify-between mb-3">
-          <div class="bg-white/20 p-3 rounded-xl backdrop-blur-sm">
-            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-            </svg>
-          </div>
-          <div class="text-4xl font-extrabold text-white">10</div>
-        </div>
-        <div class="text-white font-semibold text-sm">Total Peminjaman</div>
-      </div>
-
-      <div class="stat-card bg-gradient-to-br from-green-400 to-green-500 p-6 rounded-2xl shadow-lg slide-in" style="animation-delay: 0.1s;">
-        <div class="flex items-center justify-between mb-3">
-          <div class="bg-white/20 p-3 rounded-xl backdrop-blur-sm">
-            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-            </svg>
-          </div>
-          <div class="text-4xl font-extrabold text-white">8</div>
-        </div>
-        <div class="text-white font-semibold text-sm">Selesai</div>
-      </div>
-
-      <div class="stat-card bg-gradient-to-br from-yellow-400 to-yellow-500 p-6 rounded-2xl shadow-lg slide-in" style="animation-delay: 0.2s;">
-        <div class="flex items-center justify-between mb-3">
-          <div class="bg-white/20 p-3 rounded-xl backdrop-blur-sm">
-            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-          </div>
-          <div class="text-4xl font-extrabold text-white">1</div>
-        </div>
-        <div class="text-white font-semibold text-sm">Sedang Dipinjam</div>
-      </div>
-
-      <div class="stat-card bg-gradient-to-br from-red-400 to-red-500 p-6 rounded-2xl shadow-lg slide-in" style="animation-delay: 0.3s;">
-        <div class="flex items-center justify-between mb-3">
-          <div class="bg-white/20 p-3 rounded-xl backdrop-blur-sm">
-            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-            </svg>
-          </div>
-          <div class="text-4xl font-extrabold text-white">1</div>
-        </div>
-        <div class="text-white font-semibold text-sm">Ditolak / Dibatalkan</div>
-      </div>
-    </div>
-
-    <!-- Search Bar -->
-    <div class="mb-8 fade-in" style="animation-delay: 0.4s;">
+    <div class="mb-8 fade-in" style="animation-delay: 0.2s;">
       <div class="relative">
         <div class="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -313,12 +255,21 @@ function renderMenu($items, $prefix = 'root') {
       </div>
     </div>
 
-    <!-- History Cards -->
+    <?php if (empty($peminjaman)): ?>
+        <div class="text-center py-10 text-gray-500 bg-white rounded-xl shadow-md fade-in">
+            <p class="text-lg">🚫 Belum ada riwayat peminjaman yang selesai atau ditolak.</p>
+        </div>
+    <?php else: ?>
     <div id="dataContainer" class="space-y-4">
       <?php foreach($peminjaman as $index => $item): ?>
         <div class="history-card glass-effect p-6 rounded-2xl shadow-md hover:shadow-xl border-l-4 
-          <?= $item['status'] == 'Selesai' ? 'border-green-400' : 'border-red-400' ?> 
-          fade-in" style="animation-delay: <?= 0.5 + ($index * 0.1) ?>s;">
+          <?php 
+            if($item['status'] == 'Selesai' || $item['status'] == 'Disetujui') echo 'border-green-400';
+            elseif($item['status'] == 'Ditolak') echo 'border-red-400';
+            else echo 'border-yellow-400';
+          ?> 
+          fade-in" style="animation-delay: <?= 0.3 + ($index * 0.1) ?>s;">
+          
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div class="flex-1 space-y-3">
               <div class="flex items-start gap-3">
@@ -328,7 +279,7 @@ function renderMenu($items, $prefix = 'root') {
                   </svg>
                 </div>
                 <div>
-                  <div class="font-bold text-gray-900 text-lg"><?= $item['nama'] ?></div>
+                  <div class="font-bold text-gray-900 text-lg"><?= htmlspecialchars($item['nama']) ?></div>
                 </div>
               </div>
 
@@ -349,18 +300,18 @@ function renderMenu($items, $prefix = 'root') {
                   <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                   </svg>
-                  <span class="text-gray-700"><strong>Agenda:</strong> <?= $item['agenda'] ?></span>
+                  <span class="text-gray-700"><strong>Agenda:</strong> <?= htmlspecialchars($item['agenda']) ?></span>
                 </div>
               </div>
             </div>
 
             <div class="flex-shrink-0">
-              <?php if($item['status']=="Selesai"): ?>
+              <?php if($item['status']=="Selesai" || $item['status']=="Disetujui"): ?>
                 <span class="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-green-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                   </svg>
-                  Selesai
+                  <?= $item['status'] ?>
                 </span>
               <?php elseif($item['status']=="Ditolak"): ?>
                 <span class="inline-flex items-center gap-2 bg-gradient-to-r from-red-500 to-red-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg">
@@ -369,16 +320,25 @@ function renderMenu($items, $prefix = 'root') {
                   </svg>
                   Ditolak
                 </span>
+              <?php else: ?>
+                <span class="inline-flex items-center gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg">
+                   <?= $item['status'] ?>
+                </span>
               <?php endif; ?>
             </div>
           </div>
         </div>
       <?php endforeach; ?>
     </div>
+    <?php endif; ?>
   </section>
 </main>
 
-<!-- Toast -->
+<!-- PERUBAHAN 3: Menambahkan Footer di paling bawah -->
+<footer class="w-full bg-[#132544] text-white text-center py-3 mt-auto">
+  © <?= date('Y'); ?> Institut Teknologi PLN - Sistem Peminjaman Aset
+</footer>
+
 <div id="toast" class="toast">
   <div class="flex items-center gap-2">
     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
